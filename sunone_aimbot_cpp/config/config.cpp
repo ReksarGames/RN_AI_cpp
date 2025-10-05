@@ -150,7 +150,7 @@ bool Config::loadConfig(const std::string& filename)
         // Buttons
         button_targeting = splitString("RightMouseButton");
         button_shoot = splitString("LeftMouseButton");
-        button_zoom = splitString("RightMouseButton");
+        button_disable_headshot = splitString("M");
         button_exit = splitString("F2");
         button_pause = splitString("F3");
         button_reload_config = splitString("F4");
@@ -451,7 +451,7 @@ bool Config::loadConfig(const std::string& filename)
     // Buttons
     button_targeting = splitString(get_string("button_targeting", "RightMouseButton"));
     button_shoot = splitString(get_string("button_shoot", "LeftMouseButton"));
-    button_zoom = splitString(get_string("button_zoom", "RightMouseButton"));
+    button_disable_headshot = splitString(get_string("button_disable_headshot", "M"));
     button_exit = splitString(get_string("button_exit", "F2"));
     button_pause = splitString(get_string("button_pause", "F3"));
     button_reload_config = splitString(get_string("button_reload_config", "F4"));
@@ -607,7 +607,7 @@ bool Config::saveConfig(const std::string& filename)
     file << "# Buttons\n"
         << "button_targeting = " << joinStrings(button_targeting) << "\n"
         << "button_shoot = " << joinStrings(button_shoot) << "\n"
-        << "button_zoom = " << joinStrings(button_zoom) << "\n"
+        << "button_disable_headshot = " << joinStrings(button_disable_headshot) << "\n"
         << "button_exit = " << joinStrings(button_exit) << "\n"
         << "button_pause = " << joinStrings(button_pause) << "\n"
         << "button_reload_config = " << joinStrings(button_reload_config) << "\n"

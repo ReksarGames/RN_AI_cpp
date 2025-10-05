@@ -125,11 +125,11 @@ void draw_buttons()
 
     ImGui::Separator();
 
-    ImGui::Text("Zoom Buttons");
+    ImGui::Text("Disable Headshot Buttons");
 
-    for (size_t i = 0; i < config.button_zoom.size(); )
+    for (size_t i = 0; i < config.button_disable_headshot.size(); )
     {
-        std::string& current_key_name = config.button_zoom[i];
+        std::string& current_key_name = config.button_disable_headshot[i];
 
         int current_index = -1;
         for (size_t k = 0; k < key_names.size(); ++k)
@@ -146,7 +146,7 @@ void draw_buttons()
             current_index = 0;
         }
 
-        std::string combo_label = "Zoom Button " + std::to_string(i);
+        std::string combo_label = "Disable Headshot Button " + std::to_string(i);
 
         if (ImGui::Combo(combo_label.c_str(), &current_index, key_names_cstrs.data(), static_cast<int>(key_names_cstrs.size())))
         {
@@ -155,18 +155,18 @@ void draw_buttons()
         }
 
         ImGui::SameLine();
-        std::string remove_button_label = "Remove##button_zoom" + std::to_string(i);
+        std::string remove_button_label = "Remove##button_disable_headshot" + std::to_string(i);
         if (ImGui::Button(remove_button_label.c_str()))
         {
-            if (config.button_zoom.size() <= 1)
+            if (config.button_disable_headshot.size() <= 1)
             {
-                config.button_zoom[0] = std::string("None");
+                config.button_disable_headshot[0] = std::string("None");
                 config.saveConfig();
                 continue;
             }
             else
             {
-                config.button_zoom.erase(config.button_zoom.begin() + i);
+                config.button_disable_headshot.erase(config.button_disable_headshot.begin() + i);
                 config.saveConfig();
                 continue;
             }
@@ -175,67 +175,9 @@ void draw_buttons()
         ++i;
     }
 
-    if (ImGui::Button("Add button##zoom"))
+    if (ImGui::Button("Add button##disable_headshot"))
     {
-        config.button_zoom.push_back("None");
-        config.saveConfig();
-    }
-
-    ImGui::Separator();
-
-    ImGui::Text("Exit Buttons");
-
-    for (size_t i = 0; i < config.button_exit.size(); )
-    {
-        std::string& current_key_name = config.button_exit[i];
-
-        int current_index = -1;
-        for (size_t k = 0; k < key_names.size(); ++k)
-        {
-            if (key_names[k] == current_key_name)
-            {
-                current_index = static_cast<int>(k);
-                break;
-            }
-        }
-
-        if (current_index == -1)
-        {
-            current_index = 0;
-        }
-
-        std::string combo_label = "Exit Button " + std::to_string(i);
-
-        if (ImGui::Combo(combo_label.c_str(), &current_index, key_names_cstrs.data(), static_cast<int>(key_names_cstrs.size())))
-        {
-            current_key_name = key_names[current_index];
-            config.saveConfig();
-        }
-
-        ImGui::SameLine();
-        std::string remove_button_label = "Remove##button_exit" + std::to_string(i);
-        if (ImGui::Button(remove_button_label.c_str()))
-        {
-            if (config.button_exit.size() <= 1)
-            {
-                config.button_exit[0] = std::string("None");
-                config.saveConfig();
-                continue;
-            }
-            else
-            {
-                config.button_exit.erase(config.button_exit.begin() + i);
-                config.saveConfig();
-                continue;
-            }
-        }
-
-        ++i;
-    }
-
-    if (ImGui::Button("Add button##exit"))
-    {
-        config.button_exit.push_back("None");
+        config.button_disable_headshot.push_back("None");
         config.saveConfig();
     }
 

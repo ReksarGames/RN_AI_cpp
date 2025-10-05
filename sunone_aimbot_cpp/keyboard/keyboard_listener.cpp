@@ -22,6 +22,7 @@ extern std::atomic<bool> aiming;
 extern std::atomic<bool> shooting;
 extern std::atomic<bool> zooming;
 extern std::atomic<bool> detectionPaused;
+extern std::atomic<bool> disable_headhshot;
 
 extern MouseThread* globalMouseThread;
 
@@ -95,6 +96,23 @@ void keyboardListener()
         zooming = isAnyKeyPressed(config.button_zoom) ||
             (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->zooming_active) ||
             (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->zooming_active);
+
+        // Disable Headshot toggle
+        static bool disableHeadshotPressed = false;
+
+        if (isAnyKeyPressed(config.button_disable_headshot))
+        {
+            if (!disableHeadshotPressed)
+            {
+                config.disable_headshot = !config.disable_headshot;
+                disableHeadshotPressed = true;
+                config.saveConfig();
+            }
+        }
+        else
+        {
+            disableHeadshotPressed = false;
+        }
 
         // Exit
         if (isAnyKeyPressed(config.button_exit))

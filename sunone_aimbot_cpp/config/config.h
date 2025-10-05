@@ -118,6 +118,7 @@ public:
     std::vector<std::string> button_targeting;
     std::vector<std::string> button_shoot;
     std::vector<std::string> button_zoom;
+    std::vector<std::string> button_disable_headshot;
     std::vector<std::string> button_exit;
     std::vector<std::string> button_pause;
     std::vector<std::string> button_reload_config;
