@@ -1,5 +1,3 @@
-<div align="center">
-
 ## 🛠️ Main Changes in This Version
 
 1. **HID Methods Implementation**  
