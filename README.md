@@ -1,15 +1,69 @@
 <div align="center">
 
-# Sunone Aimbot C++ - Модифицированная версия
+## 🛠️ Main Changes in This Version
 
-## Модификации в этой версии
+1. **HID Methods Implementation**  
+   Added two methods to improve system accuracy and speed.  
+2. **Makcu Method**  
+   Improvements to game movement handling and control.  
+3. **Kalman Filter**  
+   Increased accuracy of target movement prediction.  
+4. **Aiming Smoothness**  
+   Reduced jitter, improving user experience.  
+5. **Performance**  
+   Optimized processes for higher performance on supported devices.  
+6. **Code Cleanup**  
+   Applied SOLID principles to improve code structure and maintainability.
 
-1. **Реализация методов HID:** Добавлены два метода для улучшения точности и скорости работы системы.
-2. **Метод Makcu:** Внесены улучшения в обработку и управление движением в игре.
-3. **Фильтр Калмана:** Добавлен для повышения точности предсказания движения цели.
-4. **Плавность:** Улучшена плавность прицеливания для уменьшения дергания и улучшения пользовательского опыта.
-5. **Производительность:** Оптимизированы некоторые процессы, что позволило увеличить производительность на поддерживаемых устройствах.
-6. **Приведение кода в порядок:** Применены принципы SOLID для улучшения структуры и поддерживаемости кода. 
+---
+
+## 🟣 New Configurations and Features
+
+### 🎨 Colorbot — Color Detection Parameters
+
+* **color_erode_iter:** number of erosion iterations — reduces image noise by removing small artifacts.  
+* **color_dilate_iter:** number of dilation iterations — enlarges objects after erosion, restoring target shape.  
+* **color_min_area:** minimum object area for detection — ignores very small regions (noise).  
+* **color_target:** target color for tracking (e.g., Yellow).  
+* **tinyArea:** minimum "point" to filter small elements — helps remove noise not related to the target.  
+* **isOnlyTop:** consider only top objects/layers (true/false) — useful for selecting the most visible target.  
+* **scanError:** allowed error in color scanning — reduces false positives.
+
+💡 **Description:**  
+Colorbot improves target detection by color, filtering noise and keeping accuracy on top objects. Perfect for highlighting specific targets on screen.
+
+---
+
+### 🎯 Kalman Filter — Target Movement Prediction
+
+💡 **Description:**  
+The Kalman filter smooths target movement and predicts its future position. This reduces jitter during aiming and improves shooting accuracy.
+
+**Parameter Purpose:**
+
+* **kalman_process_noise:** accounts for random changes in target movement (process noise).  
+* **kalman_measurement_noise:** accounts for measurement inaccuracies (sensor or camera noise).  
+* **kalman_speed_multiplier_x / kalman_speed_multiplier_y:** scales prediction speed horizontally and vertically.  
+* **resetThreshold:** threshold above which the filter resets and starts tracking the target anew.
+
+---
+
+### 🖥️ HID — Device Connection
+
+* **hid_vid:** `0x1956`  
+* **hid_pid:** `0x3001`  
+* **PING_CODE:** `0xF9`  
+
+💡 **Description:**  
+HID configuration allows direct connection to specific boards for controlling the system. Use these parameters for connecting an Arduino Leonardo.
+
+---
+
+### ⚠️ Important Changes
+
+* Removed methods that are already detected automatically: **Arduino**, **WIN32**, **HID**.  
+* These methods remained in the code but are no longer needed, as they are detected automatically.  
+* If necessary, you can re-enable them depending on your firmware and hardware.
 
 
 [![C++](https://img.shields.io/badge/C%2B%2B-17-blue)](https://github.com/SunOner/sunone_aimbot_cpp)
