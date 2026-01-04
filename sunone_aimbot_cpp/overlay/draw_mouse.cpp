@@ -37,6 +37,12 @@ float prev_wind_W = config.wind_W;
 float prev_wind_M = config.wind_M;
 float prev_wind_D = config.wind_D;
 
+bool  prev_triggerbot = config.triggerbot;
+float prev_triggerbot_bScope_multiplier = config.triggerbot_bScope_multiplier;
+float prev_triggerbot_interval = static_cast<float>(config.triggerbot_interval);
+float prev_triggerbot_predict_ms = static_cast<float>(config.triggerbot_predict_ms);
+float prev_triggerbot_predict_alpha = static_cast<float>(config.triggerbot_predict_alpha);
+
 bool prev_auto_shoot = config.auto_shoot;
 float prev_bScope_multiplier = config.bScope_multiplier;
 
@@ -213,7 +219,7 @@ void draw_mouse()
     {
         bool changed = false;
         changed |= ImGui::SliderFloat("Kalman Process Noise", &config.kalman_process_noise, 0.10f, 1.0f, "%.4f");
-        changed |= ImGui::SliderFloat("Kalman Measurement Noise", &config.kalman_measurement_noise, 0.50f, 1.0f, "%.4f");
+        changed |= ImGui::SliderFloat("Kalman Measurement Noise", &config.kalman_measurement_noise, 0.40f, 1.0f, "%.4f");
         changed |= ImGui::SliderFloat("Kalman Speed Multiplier X", &config.kalman_speed_multiplier_x, 0.1f, 5.0f, "%.2f");
         changed |= ImGui::SliderFloat("Kalman Speed Multiplier Y", &config.kalman_speed_multiplier_y, 0.1f, 5.0f, "%.2f");
 
@@ -300,7 +306,8 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier
+            config.bScope_multiplier,
+            config.triggerbot_bScope_multiplier
         );
         input_method_changed.store(true);
     }
@@ -411,6 +418,31 @@ void draw_mouse()
     if (config.auto_shoot)
     {
         ImGui::SliderFloat("bScope Multiplier", &config.bScope_multiplier, 0.5f, 2.0f, "%.1f");
+    }
+
+    ImGui::SeparatorText("Triggerbot");
+    ImGui::Checkbox("Triggerbot (only fire, no aim)", &config.triggerbot);
+    if (config.triggerbot)
+    {
+        float interval = static_cast<float>(config.triggerbot_interval);
+        if (ImGui::SliderFloat("Triggerbot interval (s, 0=hold)", &interval, 0.0f, 2.0f, "%.2f"))
+        {
+            config.triggerbot_interval = interval;
+            config.saveConfig();
+        }
+        float predict_ms = static_cast<float>(config.triggerbot_predict_ms);
+        if (ImGui::SliderFloat("Triggerbot predict (ms)", &predict_ms, 0.0f, 150.0f, "%.0f"))
+        {
+            config.triggerbot_predict_ms = predict_ms;
+            config.saveConfig();
+        }
+        float predict_alpha = static_cast<float>(config.triggerbot_predict_alpha);
+        if (ImGui::SliderFloat("Triggerbot velocity smoothing", &predict_alpha, 0.0f, 1.0f, "%.2f"))
+        {
+            config.triggerbot_predict_alpha = predict_alpha;
+            config.saveConfig();
+        }
+        ImGui::SliderFloat("Triggerbot bScope", &config.triggerbot_bScope_multiplier, 0.5f, 2.0f, "%.1f");
     }
 
     ImGui::SeparatorText("Wind mouse");
@@ -797,7 +829,8 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.triggerbot_bScope_multiplier);
 
         config.saveConfig();
         globalMouseThread->setSmoothnessValue(config.smoothness);
@@ -829,16 +862,27 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.triggerbot_bScope_multiplier);
 
         config.saveConfig();
     }
 
     if (prev_auto_shoot != config.auto_shoot ||
-        prev_bScope_multiplier != config.bScope_multiplier)
+        prev_bScope_multiplier != config.bScope_multiplier ||
+        prev_triggerbot != config.triggerbot ||
+        prev_triggerbot_bScope_multiplier != config.triggerbot_bScope_multiplier ||
+        prev_triggerbot_interval != static_cast<float>(config.triggerbot_interval) ||
+        prev_triggerbot_predict_ms != static_cast<float>(config.triggerbot_predict_ms) ||
+        prev_triggerbot_predict_alpha != static_cast<float>(config.triggerbot_predict_alpha))
     {
         prev_auto_shoot = config.auto_shoot;
         prev_bScope_multiplier = config.bScope_multiplier;
+        prev_triggerbot = config.triggerbot;
+        prev_triggerbot_bScope_multiplier = config.triggerbot_bScope_multiplier;
+        prev_triggerbot_interval = static_cast<float>(config.triggerbot_interval);
+        prev_triggerbot_predict_ms = static_cast<float>(config.triggerbot_predict_ms);
+        prev_triggerbot_predict_alpha = static_cast<float>(config.triggerbot_predict_alpha);
 
         globalMouseThread->updateConfig(
             config.detection_resolution,
@@ -848,7 +892,8 @@ void draw_mouse()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.triggerbot_bScope_multiplier);
 
         config.saveConfig();
     }

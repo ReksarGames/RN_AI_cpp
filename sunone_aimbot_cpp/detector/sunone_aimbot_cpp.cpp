@@ -59,6 +59,7 @@ std::atomic<bool> input_method_changed(false);
 
 std::atomic<bool> zooming(false);
 std::atomic<bool> shooting(false);
+std::atomic<bool> triggerbot_button(false);
 
 void createInputDevices()
 {
@@ -282,7 +283,8 @@ void mouseThreadFunction(MouseThread& mouseThread)
                     config.maxSpeedMultiplier,
                     config.predictionInterval,
                     config.auto_shoot,
-                    config.bScope_multiplier
+                    config.bScope_multiplier,
+                    config.triggerbot_bScope_multiplier
                 );
                 mouseThread.setUseSmoothing(config.use_smoothing);
                 mouseThread.setUseKalman(config.use_kalman);
@@ -447,6 +449,7 @@ int main()
             config.predictionInterval,
             config.auto_shoot,
             config.bScope_multiplier,
+            config.triggerbot_bScope_multiplier,
             arduinoSerial,
             gHub,
             kmboxSerial,

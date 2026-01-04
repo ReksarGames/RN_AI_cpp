@@ -21,6 +21,7 @@ extern std::atomic<bool> shouldExit;
 extern std::atomic<bool> aiming;
 extern std::atomic<bool> shooting;
 extern std::atomic<bool> zooming;
+extern std::atomic<bool> triggerbot_button;
 extern std::atomic<bool> detectionPaused;
 extern std::atomic<bool> disable_headhshot;
 
@@ -97,6 +98,14 @@ void keyboardListener()
             (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->zooming_active) ||
             (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->zooming_active);
 
+        // Triggerbot button (клавиатура/макку дополняют состояние, которое ставит kmbox_b)
+        {
+            const bool kb_trigger = isAnyKeyPressed(config.button_triggerbot);
+            const bool makcu_trigger = (makcu && makcu->isOpen() && makcu->triggerbot_active);
+            const bool current = triggerbot_button.load();
+            triggerbot_button = current || kb_trigger || makcu_trigger;
+        }
+
         // Disable Headshot toggle
         static bool disableHeadshotPressed = false;
 
@@ -141,25 +150,26 @@ void keyboardListener()
         if (isAnyKeyPressed(config.button_reload_config))
         {
             if (!reloadPressed)
-            {
-                config.loadConfig();
-                
-                if (globalMouseThread)
                 {
-                    globalMouseThread->updateConfig(
-                        config.detection_resolution,
-                        config.fovX,
-                        config.fovY,
-                        config.minSpeedMultiplier,
-                        config.maxSpeedMultiplier,
-                        config.predictionInterval,
-                        config.auto_shoot,
-                        config.bScope_multiplier
-                    );
+                    config.loadConfig();
+                    
+                    if (globalMouseThread)
+                    {
+                        globalMouseThread->updateConfig(
+                            config.detection_resolution,
+                            config.fovX,
+                            config.fovY,
+                            config.minSpeedMultiplier,
+                            config.maxSpeedMultiplier,
+                            config.predictionInterval,
+                            config.auto_shoot,
+                            config.bScope_multiplier,
+                            config.triggerbot_bScope_multiplier
+                        );
+                    }
+                    reloadPressed = true;
                 }
-                reloadPressed = true;
             }
-        }
         else
         {
             reloadPressed = false;

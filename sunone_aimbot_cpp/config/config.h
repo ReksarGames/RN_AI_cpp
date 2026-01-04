@@ -92,7 +92,12 @@ public:
 
     // Mouse shooting
     bool auto_shoot;
+    bool triggerbot;
+    double triggerbot_interval;      // seconds between triggerbot shots (0 = continuous hold)
+    double triggerbot_predict_ms;    // prediction lead for triggerbot (ms, 0 = off)
+    double triggerbot_predict_alpha; // smoothing factor for predicted velocity (0..1)
     float bScope_multiplier;
+    float triggerbot_bScope_multiplier;
 
     // AI
     std::string backend;
@@ -117,6 +122,7 @@ public:
     // Buttons
     std::vector<std::string> button_targeting;
     std::vector<std::string> button_shoot;
+    std::vector<std::string> button_triggerbot;
     std::vector<std::string> button_zoom;
     std::vector<std::string> button_disable_headshot;
     std::vector<std::string> button_exit;

@@ -52,7 +52,8 @@ void draw_capture_settings()
             config.maxSpeedMultiplier,
             config.predictionInterval,
             config.auto_shoot,
-            config.bScope_multiplier);
+            config.bScope_multiplier,
+            config.triggerbot_bScope_multiplier);
         config.saveConfig();
     }
 

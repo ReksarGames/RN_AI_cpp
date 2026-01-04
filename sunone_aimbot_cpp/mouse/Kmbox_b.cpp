@@ -145,8 +145,14 @@ void KmboxConnection::startListening()
 
 void KmboxConnection::listeningThreadFunc()
 {
-    /* разрешённые биты: 0x01 (ЛКМ) | 0x02 (ПКМ) | 0x10 (боковая) */
-    constexpr uint8_t allowed_mask = 0x01 | 0x02 | 0x10;
+    // биты 0..5: ЛКМ/ПКМ/СКМ/Side4/Side5 (+ запас 0x20)
+    constexpr uint8_t button_mask = 0x3F;
+    auto popcount8 = [](uint8_t v) {
+        v = (v & 0x55) + ((v >> 1) & 0x55);
+        v = (v & 0x33) + ((v >> 2) & 0x33);
+        return static_cast<int>((v + (v >> 4)) & 0x0F);
+    };
+    uint8_t last_buttons = 0;
 
     while (listening_ && is_open_) {
         try {
@@ -157,12 +163,26 @@ void KmboxConnection::listeningThreadFunc()
             uint8_t b = 0;
             serial_.read(&b, 1);
 
-            /* отбрасываем байт, если нашёлся «лишний» (неразрешённый) бит */
-            if (b & ~allowed_mask) continue;
+            const uint8_t filtered = b & button_mask;
+            const int bit_cnt = popcount8(filtered);
+            const bool valid_empty = filtered == 0x00;
+            const bool valid_single = (filtered <= 0x1F) && (bit_cnt == 1);
+
+            if (valid_empty) {
+                last_buttons = 0;
+            }
+            else if (valid_single) {
+                last_buttons = filtered;
+            }
+            else {
+                // шумовой пакет — не трогаем состояние
+                continue;
+            }
 
             /* обновляем флаги */
-            shooting_active = b & 0x01;   // ЛКМ
-            aiming_active = b & 0x10;   // боковая
+            shooting_active = last_buttons & 0x01;   // ЛКМ
+            aiming_active = last_buttons & 0x10;   // боковая (mouse5)
+            triggerbot_button.store(static_cast<bool>(last_buttons & 0x08)); // mouse4 -> триггербот
             shooting.store(shooting_active);
             aiming.store(aiming_active);
 

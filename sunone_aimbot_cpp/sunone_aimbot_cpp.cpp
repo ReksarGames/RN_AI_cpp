@@ -59,6 +59,7 @@ std::atomic<bool> input_method_changed(false);
 
 std::atomic<bool> zooming(false);
 std::atomic<bool> shooting(false);
+std::atomic<bool> triggerbot_button(false);
 
 void createInputDevices()
 {
@@ -289,7 +290,8 @@ void mouseThreadFunction(MouseThread& mouseThread)
                     config.maxSpeedMultiplier,
                     config.predictionInterval,
                     config.auto_shoot,
-                    config.bScope_multiplier
+                    config.bScope_multiplier,
+                    config.triggerbot_bScope_multiplier
                 );
                 mouseThread.setUseSmoothing(config.use_smoothing);
                 mouseThread.setUseKalman(config.use_kalman);
@@ -379,32 +381,83 @@ void mouseThreadFunction(MouseThread& mouseThread)
             hasLastTarget = false;
         }
 
-        // Наводка (всё остаётся как было)
-        if (aiming)
-        {
-            if (target)
-            {
-                mouseThread.moveMousePivot(target->pivotX, target->pivotY);
+        bool shouldPressAuto = false;
+        bool shouldPressTrigger = false;
+        bool triggerbotActive = config.triggerbot && triggerbot_button.load();
+        static auto lastTriggerShot = std::chrono::steady_clock::now() - std::chrono::milliseconds(500);
+        static bool  prev_has_target = false;
+        static cv::Point2d prev_center{ 0.0, 0.0 };
+        static cv::Point2d vel{ 0.0, 0.0 };
+        static auto prev_time = std::chrono::steady_clock::now();
 
-                if (config.auto_shoot)
-                {
-                    mouseThread.pressMouse(*target);
-                }
+        bool triggerbotInScope = false;
+        if (target)
+        {
+            double cx = target->x + target->w * 0.5;
+            double cy = target->y + target->h * 0.5;
+
+            auto now = std::chrono::steady_clock::now();
+            double dt = prev_has_target ? std::chrono::duration<double>(now - prev_time).count() : 0.0;
+
+            double px = cx;
+            double py = cy;
+            if (config.triggerbot_predict_ms > 0.0 && prev_has_target && dt > 0.0)
+            {
+                double vx = (cx - prev_center.x) / dt;
+                double vy = (cy - prev_center.y) / dt;
+                double alpha = std::clamp(config.triggerbot_predict_alpha, 0.0, 1.0);
+                vel.x = vel.x + (vx - vel.x) * alpha;
+                vel.y = vel.y + (vy - vel.y) * alpha;
+                double lead_s = config.triggerbot_predict_ms / 1000.0;
+                px = cx + vel.x * lead_s;
+                py = cy + vel.y * lead_s;
             }
             else
             {
-                if (config.auto_shoot)
-                {
-                    mouseThread.releaseMouse();
-                }
+                vel = { 0.0, 0.0 };
             }
+
+            prev_center = { cx, cy };
+            prev_time = std::chrono::steady_clock::now();
+            prev_has_target = true;
+
+            double pred_x = px - target->w * 0.5;
+            double pred_y = py - target->h * 0.5;
+            triggerbotInScope = mouseThread.check_target_in_scope(pred_x, pred_y, target->w, target->h, config.triggerbot_bScope_multiplier);
+        }
+        else {
+            prev_has_target = false;
+            vel = { 0.0, 0.0 };
+        }
+
+        if (aiming && target)
+        {
+            mouseThread.moveMousePivot(target->pivotX, target->pivotY);
+            if (config.auto_shoot)
+                shouldPressAuto = true;
+        }
+
+        if (triggerbotActive && triggerbotInScope)
+        {
+            auto now = std::chrono::steady_clock::now();
+            double interval = config.triggerbot_interval;
+            if (interval <= 0.0 || now - lastTriggerShot >= std::chrono::duration<double>(interval))
+            {
+                shouldPressTrigger = true;
+                lastTriggerShot = now;
+            }
+        }
+
+        if (target && (shouldPressAuto || shouldPressTrigger))
+        {
+            if (shouldPressTrigger)
+                mouseThread.pressMouse(*target, config.triggerbot_bScope_multiplier);
+            else
+                mouseThread.pressMouse(*target);
         }
         else
         {
-            if (config.auto_shoot)
-            {
-                mouseThread.releaseMouse();
-            }
+            mouseThread.releaseMouse();
         }
 
         handleEasyNoRecoil(mouseThread);
@@ -506,6 +559,7 @@ int main()
             config.predictionInterval,
             config.auto_shoot,
             config.bScope_multiplier,
+            config.triggerbot_bScope_multiplier,
             arduinoSerial,
             gHub,
             kmboxSerial,

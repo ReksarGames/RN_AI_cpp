@@ -113,7 +113,12 @@ bool Config::loadConfig(const std::string& filename)
 
         // Mouse shooting
         auto_shoot = false;
+        triggerbot = false;
+        triggerbot_interval = 0.0;
+        triggerbot_predict_ms = 0.0;
+        triggerbot_predict_alpha = 0.5;
         bScope_multiplier = 1.0f;
+        triggerbot_bScope_multiplier = 1.0f;
 
         // AI
 #ifdef USE_CUDA
@@ -150,6 +155,7 @@ bool Config::loadConfig(const std::string& filename)
         // Buttons
         button_targeting = splitString("RightMouseButton");
         button_shoot = splitString("LeftMouseButton");
+        button_triggerbot = splitString("X2MouseButton");
         button_disable_headshot = splitString("M");
         button_exit = splitString("F2");
         button_pause = splitString("F3");
@@ -363,7 +369,12 @@ bool Config::loadConfig(const std::string& filename)
 
     // Mouse shooting
     auto_shoot = get_bool("auto_shoot", false);
+    triggerbot = get_bool("triggerbot", false);
+    triggerbot_interval = get_double("triggerbot_interval", 0.0);
+    triggerbot_predict_ms = get_double("triggerbot_predict_ms", 0.0);
+    triggerbot_predict_alpha = get_double("triggerbot_predict_alpha", 0.5);
     bScope_multiplier = (float)get_double("bScope_multiplier", 1.2);
+    triggerbot_bScope_multiplier = (float)get_double("triggerbot_bScope_multiplier", 1.2);
 
     // Color detection
     color_erode_iter = get_long("color_erode_iter", 1);
@@ -451,6 +462,7 @@ bool Config::loadConfig(const std::string& filename)
     // Buttons
     button_targeting = splitString(get_string("button_targeting", "RightMouseButton"));
     button_shoot = splitString(get_string("button_shoot", "LeftMouseButton"));
+    button_triggerbot = splitString(get_string("button_triggerbot", "X2MouseButton"));
     button_disable_headshot = splitString(get_string("button_disable_headshot", "M"));
     button_exit = splitString(get_string("button_exit", "F2"));
     button_pause = splitString(get_string("button_pause", "F3"));
@@ -575,8 +587,14 @@ bool Config::saveConfig(const std::string& filename)
     // Mouse shooting
     file << "# Mouse shooting\n"
         << "auto_shoot = " << (auto_shoot ? "true" : "false") << "\n"
+        << "triggerbot = " << (triggerbot ? "true" : "false") << "\n"
+        << std::fixed << std::setprecision(2)
+        << "triggerbot_interval = " << triggerbot_interval << "\n"
+        << "triggerbot_predict_ms = " << triggerbot_predict_ms << "\n"
+        << "triggerbot_predict_alpha = " << triggerbot_predict_alpha << "\n"
         << std::fixed << std::setprecision(1)
-        << "bScope_multiplier = " << bScope_multiplier << "\n\n";
+        << "bScope_multiplier = " << bScope_multiplier << "\n"
+        << "triggerbot_bScope_multiplier = " << triggerbot_bScope_multiplier << "\n\n";
 
     // AI
     file << "# AI\n"
@@ -607,6 +625,7 @@ bool Config::saveConfig(const std::string& filename)
     file << "# Buttons\n"
         << "button_targeting = " << joinStrings(button_targeting) << "\n"
         << "button_shoot = " << joinStrings(button_shoot) << "\n"
+        << "button_triggerbot = " << joinStrings(button_triggerbot) << "\n"
         << "button_disable_headshot = " << joinStrings(button_disable_headshot) << "\n"
         << "button_exit = " << joinStrings(button_exit) << "\n"
         << "button_pause = " << joinStrings(button_pause) << "\n"
