@@ -34,6 +34,7 @@ public:
     bool aiming_active;
     bool shooting_active;
     bool zooming_active;
+    bool triggerbot_active;
 
 private:
     void sendCommand(const std::string& command);

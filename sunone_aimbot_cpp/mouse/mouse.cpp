@@ -26,6 +26,7 @@ MouseThread::MouseThread(
     double predictionInterval,
     bool auto_shoot,
     float bScope_multiplier,
+    float triggerbot_bScope_multiplier,
     SerialConnection* serialConnection,
     GhubMouse* gHubMouse,
     KmboxConnection* kmboxConnection,
@@ -43,6 +44,7 @@ MouseThread::MouseThread(
     center_y(resolution / 2.0),
     auto_shoot(auto_shoot),
     bScope_multiplier(bScope_multiplier),
+    triggerbot_bScope_multiplier(triggerbot_bScope_multiplier),
     serial(serialConnection),
     kmbox(kmboxConnection),
     kmbox_net(Kmbox_Net_Connection),
@@ -82,7 +84,8 @@ void MouseThread::updateConfig(
     double maxSpeedMultiplier,
     double predictionInterval,
     bool auto_shoot,
-    float bScope_multiplier
+    float bScope_multiplier,
+    float triggerbot_bScope_multiplier
 )
 {
     screen_width = screen_height = resolution;
@@ -92,6 +95,7 @@ void MouseThread::updateConfig(
     prediction_interval = predictionInterval;
     this->auto_shoot = auto_shoot;
     this->bScope_multiplier = bScope_multiplier;
+    this->triggerbot_bScope_multiplier = triggerbot_bScope_multiplier;
 
     center_x = center_y = resolution / 2.0;
     max_distance = std::hypot(resolution, resolution) / 2.0;
@@ -342,11 +346,12 @@ bool MouseThread::check_target_in_scope(double target_x, double target_y, double
     return (center_x > x1 && center_x < x2 && center_y > y1 && center_y < y2);
 }
 
-void MouseThread::pressMouse(const AimbotTarget& target)
+void MouseThread::pressMouse(const AimbotTarget& target, float scope_multiplier)
 {
     std::lock_guard<std::mutex> lock(input_method_mutex);
 
-    bool bScope = check_target_in_scope(target.x, target.y, target.w, target.h, bScope_multiplier);
+    double multiplier = scope_multiplier > 0.0f ? scope_multiplier : bScope_multiplier;
+    bool bScope = check_target_in_scope(target.x, target.y, target.w, target.h, multiplier);
     if (bScope && !mouse_pressed)
     {
         if (makcu)
@@ -630,11 +635,21 @@ void MouseThread::moveMouseWithKalmanAndSmoothing(double targetX, double targetY
 
     const double resetThreshold = config.resetThreshold;
 
-    static double lastRawX = 0.0, lastRawY = 0.0;
-    static bool firstCall = true;
-    auto now = std::chrono::steady_clock::now();    
+    auto now = std::chrono::steady_clock::now();
 
-    if (firstCall || std::hypot(rawX - lastRawX, rawY - lastRawY) > resetThreshold) {
+    const double maxDt = 0.25; // avoid using stale timestamps after long pauses
+    bool needReset = !kalman_smoothing_initialized;
+
+    if (!needReset)
+    {
+        double jump = std::hypot(rawX - last_raw_kalman_x, rawY - last_raw_kalman_y);
+        if (jump > resetThreshold) needReset = true;
+
+        double dtSinceLast = std::chrono::duration<double>(now - prevKalmanTime).count();
+        if (dtSinceLast > maxDt) needReset = true;
+    }
+
+    if (needReset || prevKalmanTime.time_since_epoch().count() == 0) {
         kfX.x = rawX;  kfX.v = 0.0;  kfX.P = 1.0;
         kfY.x = rawY;  kfY.v = 0.0;  kfY.P = 1.0;
         prevKalmanTime = now;
@@ -642,27 +657,34 @@ void MouseThread::moveMouseWithKalmanAndSmoothing(double targetX, double targetY
         last_kX = rawX;
         last_kY = rawY;
 
-        firstCall = false;
+        move_overflow_x = 0.0;
+        move_overflow_y = 0.0;
+
+        kalman_smoothing_initialized = true;
     }
-    lastRawX = rawX;
-    lastRawY = rawY;
+    last_raw_kalman_x = rawX;
+    last_raw_kalman_y = rawY;
 
     double dt;
-    if (prevKalmanTime.time_since_epoch().count() == 0) {
-        dt = 1.0 / static_cast<double>(config.capture_fps);
+    if (prevKalmanTime.time_since_epoch().count() == 0 || needReset) {
+        dt = 1.0 / static_cast<double>(std::max(config.capture_fps, 1));
     } else {
         dt = std::chrono::duration<double>(now - prevKalmanTime).count();
-        dt = std::max(dt, 1e-8);
     }
     prevKalmanTime = now;
+    dt = std::clamp(dt, 1e-8, maxDt);
 
     double filtX = kfX.update(rawX, dt);
     double filtY = kfY.update(rawY, dt);
 
     int N = smoothness > 0 ? smoothness : 1;
-    double alpha = 1.0 / static_cast<double>(N);
+    double baseAlpha = 1.0 - std::exp(-dt * static_cast<double>(config.capture_fps) / N);
 
-    if (std::hypot(filtX - last_kX, filtY - last_kY) > resetThreshold) {
+    double delta = std::hypot(filtX - last_kX, filtY - last_kY);
+    double catchup = std::clamp(delta / std::max(resetThreshold, 1e-3), 0.0, 1.0);
+    double alpha = std::clamp(baseAlpha + (0.45 - baseAlpha) * catchup, baseAlpha, 0.45);
+
+    if (delta > resetThreshold) {
         last_kX = filtX;
         last_kY = filtY;
     } else {
@@ -675,13 +697,16 @@ void MouseThread::moveMouseWithKalmanAndSmoothing(double targetX, double targetY
     mvX *= kalman_speed_multiplier_x;
     mvY *= kalman_speed_multiplier_y;
 
-    int dx = static_cast<int>(std::round(mvX));
-    int dy = static_cast<int>(std::round(mvY));
+    auto [stepX, stepY] = addOverflow(mvX, mvY, move_overflow_x, move_overflow_y);
+    int dx = static_cast<int>(stepX);
+    int dy = static_cast<int>(stepY);
 
-    if (wind_mouse_enabled) {
-        windMouseMoveRelative(dx, dy);
-    } else {
-        queueMove(dx, dy);
+    if (dx || dy) {
+        if (wind_mouse_enabled) {
+            windMouseMoveRelative(dx, dy);
+        } else {
+            queueMove(dx, dy);
+        }
     }
 }
 

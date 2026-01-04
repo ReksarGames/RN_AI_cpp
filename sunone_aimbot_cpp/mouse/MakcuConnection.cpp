@@ -24,7 +24,7 @@ static const uint8_t  BAUD_CHANGE_CMD[9] =
 /*                          КОНСТРУКТОР                                  */
 MakcuConnection::MakcuConnection(const std::string& port, unsigned int /*baud_rate*/)
     : is_open_(false), listening_(false),
-    aiming_active(false), shooting_active(false), zooming_active(false)
+    aiming_active(false), shooting_active(false), zooming_active(false), triggerbot_active(false)
 {
     try {
         /* 1. открываем порт на 115 200 */
@@ -176,7 +176,7 @@ void MakcuConnection::startListening()
 void MakcuConnection::listeningThreadFunc()
 {
     /* допустимые байты: 0x00 (нет), 0x01 (ЛКМ), 0x02 (ПКМ), 0x03 (обе) */
-    const std::array<uint8_t, 4> legal{ 0x00,0x01,0x02,0x03 };
+    const std::array<uint8_t, 6> legal{ 0x00,0x01,0x02,0x03,0x10,0x11 };
 
     while (listening_ && is_open_) {
         try {
@@ -189,6 +189,32 @@ void MakcuConnection::listeningThreadFunc()
 
             if (std::find(legal.begin(), legal.end(), b) == legal.end())
                 continue;                       // отброс «мусора»
+
+            // Боковые кнопки (0x10 верхняя, 0x11 нижняя)
+            if (b == 0x10) {
+                aiming_active = true;
+                aiming.store(true);
+                triggerbot_active = false;
+                std::cout << "Side1 (aim) PRESS" << std::endl;
+                continue;
+            }
+            if (b == 0x11) {
+                triggerbot_active = true;
+                triggerbot_button.store(true);
+                std::cout << "Side2 (triggerbot) PRESS" << std::endl;
+                continue;
+            }
+
+            if (b == 0x00) {
+                shooting_active = false;
+                aiming_active = false;
+                triggerbot_active = false;
+                shooting.store(false);
+                aiming.store(false);
+                triggerbot_button.store(false);
+                std::cout << "Buttons released" << std::endl;
+                continue;
+            }
 
             /* обновляем флаги */
             shooting_active = b & 0x01;           // ЛКМ

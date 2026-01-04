@@ -43,6 +43,7 @@
     <ClCompile Include="mouse\HID\HIDConnection.cpp" />
     <ClCompile Include="mouse\HID\HIDConnectionV2.cpp" />
     <ClCompile Include="detector\trt_detector.cpp" />
+    <ClCompile Include="detector\color_detector.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="scr">
@@ -96,6 +97,7 @@
     <ClInclude Include="mouse\HID\HIDConnectionV2.h" />
     <ClInclude Include="detector\fused_preprocess.h" />
     <ClInclude Include="detector\trt_detector.h" />
+    <ClInclude Include="detector\color_detector.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

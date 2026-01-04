@@ -38,6 +38,7 @@ private:
     double center_x, center_y;
     bool   auto_shoot;
     float  bScope_multiplier;
+    float  triggerbot_bScope_multiplier;
 
     // Для предсказания
     double prev_x, prev_y;
@@ -124,6 +125,9 @@ private:
     double last_dy{ 0.0 };
     double last_kX{ 0.0 };
     double last_kY{ 0.0 };
+    double last_raw_kalman_x{ 0.0 };
+    double last_raw_kalman_y{ 0.0 };
+    bool   kalman_smoothing_initialized{ false };
 
     double kalman_speed_multiplier_x{ 1.0 };
     double kalman_speed_multiplier_y{ 1.0 };
@@ -139,6 +143,7 @@ public:
         double predictionInterval,
         bool auto_shoot,
         float bScope_multiplier,
+        float triggerbot_bScope_multiplier,
         SerialConnection* serialConnection = nullptr,
         GhubMouse* gHubMouse = nullptr,
         KmboxConnection* kmboxConnection = nullptr,
@@ -157,7 +162,8 @@ public:
         double maxSpeedMultiplier,
         double predictionInterval,
         bool auto_shoot,
-        float bScope_multiplier
+        float bScope_multiplier,
+        float triggerbot_bScope_multiplier
     );
 
     // Переключатель логики
@@ -175,7 +181,7 @@ public:
     void moveMousePivot(double pivotX, double pivotY);
     std::pair<double, double> predict_target_position(double x, double y);
     void moveMouse(const AimbotTarget& target);
-    void pressMouse(const AimbotTarget& target);
+    void pressMouse(const AimbotTarget& target, float scope_multiplier = -1.0f);
     void releaseMouse();
     void resetPrediction();
     void checkAndResetPredictions();
