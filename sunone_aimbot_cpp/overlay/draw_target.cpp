@@ -22,6 +22,9 @@ bool prev_ignore_third_person = config.ignore_third_person;
 bool prev_shooting_range_targets = config.shooting_range_targets;
 bool prev_focuse_target = config.focusTarget;
 bool prev_auto_aim = config.auto_aim;
+bool prev_target_lock_enabled = config.target_lock_enabled;
+float prev_target_lock_distance = config.target_lock_distance;
+float prev_target_lock_reacquire_time = config.target_lock_reacquire_time;
 bool prev_easynorecoil = config.easynorecoil;
 float prev_easynorecoilstrength = config.easynorecoilstrength;
 
@@ -73,6 +76,12 @@ void draw_target()
     ImGui::Checkbox("Shooting range targets", &config.shooting_range_targets);
     ImGui::Checkbox("Focuse Target", &config.focusTarget);
     ImGui::Checkbox("Auto Aim", &config.auto_aim);
+    ImGui::Checkbox("Smart Target Lock", &config.target_lock_enabled);
+    if (config.target_lock_enabled)
+    {
+        ImGui::SliderFloat("Lock Distance", &config.target_lock_distance, 20.0f, 400.0f, "%.1f");
+        ImGui::SliderFloat("Reacquire Time (s)", &config.target_lock_reacquire_time, 0.05f, 2.0f, "%.2f");
+    }
 
     if (prev_disable_headshot != config.disable_headshot ||
         prev_body_y_offset != config.body_y_offset ||
@@ -81,6 +90,9 @@ void draw_target()
         prev_shooting_range_targets != config.shooting_range_targets ||
         prev_focuse_target != config.focusTarget ||
         prev_auto_aim != config.auto_aim ||
+        prev_target_lock_enabled != config.target_lock_enabled ||
+        prev_target_lock_distance != config.target_lock_distance ||
+        prev_target_lock_reacquire_time != config.target_lock_reacquire_time ||
         prev_easynorecoil != config.easynorecoil ||
         prev_easynorecoilstrength != config.easynorecoilstrength)
     {
@@ -91,6 +103,9 @@ void draw_target()
         prev_shooting_range_targets = config.shooting_range_targets;
         prev_focuse_target = config.focusTarget;
         prev_auto_aim = config.auto_aim;
+        prev_target_lock_enabled = config.target_lock_enabled;
+        prev_target_lock_distance = config.target_lock_distance;
+        prev_target_lock_reacquire_time = config.target_lock_reacquire_time;
         prev_easynorecoil = config.easynorecoil;
         prev_easynorecoilstrength = config.easynorecoilstrength;
         config.saveConfig();

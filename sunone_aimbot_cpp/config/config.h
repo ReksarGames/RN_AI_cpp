@@ -30,6 +30,9 @@ public:
     bool shooting_range_targets;
     bool focusTarget;
     bool auto_aim;
+    bool target_lock_enabled;
+    float target_lock_distance;
+    float target_lock_reacquire_time;
 
     // Mouse
     int fovX;

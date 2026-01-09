@@ -66,6 +66,9 @@ bool Config::loadConfig(const std::string& filename)
         shooting_range_targets = false;
         focusTarget = false;
         auto_aim = false;
+        target_lock_enabled = false;
+        target_lock_distance = 100.0f;
+        target_lock_reacquire_time = 0.30f;
 
         // Mouse
         fovX = 106;
@@ -322,6 +325,9 @@ bool Config::loadConfig(const std::string& filename)
     shooting_range_targets = get_bool("shooting_range_targets", false);
     focusTarget = get_bool("focusTarget", false);
     auto_aim = get_bool("auto_aim", false);
+    target_lock_enabled = get_bool("target_lock_enabled", false);
+    target_lock_distance = static_cast<float>(get_double("target_lock_distance", 100.0));
+    target_lock_reacquire_time = static_cast<float>(get_double("target_lock_reacquire_time", 0.30));
 
     // Mouse
     fovX = get_long("fovX", 106);
@@ -529,7 +535,12 @@ bool Config::saveConfig(const std::string& filename)
         << "ignore_third_person = " << (ignore_third_person ? "true" : "false") << "\n"
         << "shooting_range_targets = " << (shooting_range_targets ? "true" : "false") << "\n"
         << "focusTarget = " << (focusTarget ? "true" : "false") << "\n"
-        << "auto_aim = " << (auto_aim ? "true" : "false") << "\n\n";
+        << "auto_aim = " << (auto_aim ? "true" : "false") << "\n"
+        << "target_lock_enabled = " << (target_lock_enabled ? "true" : "false") << "\n"
+        << std::fixed << std::setprecision(1)
+        << "target_lock_distance = " << target_lock_distance << "\n"
+        << std::fixed << std::setprecision(2)
+        << "target_lock_reacquire_time = " << target_lock_reacquire_time << "\n\n";
 
     // Mouse
     file << "# Mouse move\n"

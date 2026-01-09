@@ -8,6 +8,8 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <cstdint>
+#include <limits>
 
 #include "capture.h"
 #include "mouse.h"
@@ -220,18 +222,181 @@ void mouseThreadFunction(MouseThread& mouseThread)
             detection_resolution_changed.store(false);
         }
 
-        AimbotTarget* target = sortTargets(
-            boxes,
-            classes,
-            config.detection_resolution,
-            config.detection_resolution,
-            config.disable_headshot
-        );
+        struct TargetLockState
+        {
+            bool active{ false };
+            uint64_t id{ 0 };
+            cv::Point2d center{ 0.0, 0.0 };
+            std::chrono::steady_clock::time_point lost_time{};
+        };
+
+        static TargetLockState target_lock_state;
+
+        auto reset_target_lock = [&]()
+            {
+                target_lock_state = TargetLockState{};
+            };
+
+        if (!config.target_lock_enabled || (!aiming.load() && !config.auto_aim))
+        {
+            reset_target_lock();
+        }
+
+        auto make_target_id = [](const cv::Rect& box, int grid) -> uint64_t
+            {
+                int x1 = (box.x / grid) * grid;
+                int y1 = (box.y / grid) * grid;
+                int x2 = ((box.x + box.width) / grid) * grid;
+                int y2 = ((box.y + box.height) / grid) * grid;
+
+                uint64_t id = 0;
+                id |= (static_cast<uint64_t>(x1) & 0xFFFF);
+                id |= (static_cast<uint64_t>(y1) & 0xFFFF) << 16;
+                id |= (static_cast<uint64_t>(x2) & 0xFFFF) << 32;
+                id |= (static_cast<uint64_t>(y2) & 0xFFFF) << 48;
+                return id;
+            };
+
+        auto is_valid_target_class = [&](int cls)
+            {
+                if (config.disable_headshot && cls == config.class_head)
+                    return false;
+
+                return cls == config.class_player ||
+                    cls == config.class_bot ||
+                    (cls == config.class_hideout_target_human && config.shooting_range_targets) ||
+                    (cls == config.class_hideout_target_balls && config.shooting_range_targets) ||
+                    (cls == config.class_third_person && !config.ignore_third_person) ||
+                    cls == config.class_head;
+            };
+
+        bool lock_blocking = false;
+        int locked_idx = -1;
+
+        if (config.target_lock_enabled)
+        {
+            const int lock_grid = 10;
+            const double lock_distance = std::max(1.0, static_cast<double>(config.target_lock_distance));
+            const double reacquire_time = std::max(0.0, static_cast<double>(config.target_lock_reacquire_time));
+            auto now = std::chrono::steady_clock::now();
+
+            if (boxes.empty() && target_lock_state.active)
+            {
+                if (target_lock_state.lost_time.time_since_epoch().count() == 0)
+                    target_lock_state.lost_time = now;
+
+                double lost_for = std::chrono::duration<double>(now - target_lock_state.lost_time).count();
+                if (lost_for >= reacquire_time)
+                    reset_target_lock();
+                else
+                    lock_blocking = true;
+            }
+            else if (target_lock_state.active)
+            {
+                for (size_t i = 0; i < boxes.size(); ++i)
+                {
+                    if (i >= classes.size() || !is_valid_target_class(classes[i]))
+                        continue;
+
+                    if (make_target_id(boxes[i], lock_grid) == target_lock_state.id)
+                    {
+                        locked_idx = static_cast<int>(i);
+                        break;
+                    }
+                }
+
+                if (locked_idx == -1)
+                {
+                    double best_dist = std::numeric_limits<double>::max();
+                    for (size_t i = 0; i < boxes.size(); ++i)
+                    {
+                        if (i >= classes.size() || !is_valid_target_class(classes[i]))
+                            continue;
+
+                        double cx = boxes[i].x + boxes[i].width * 0.5;
+                        double cy = boxes[i].y + boxes[i].height * 0.5;
+                        double dist = std::hypot(cx - target_lock_state.center.x, cy - target_lock_state.center.y);
+                        if (dist < best_dist)
+                        {
+                            best_dist = dist;
+                            locked_idx = static_cast<int>(i);
+                        }
+                    }
+
+                    if (locked_idx != -1 && best_dist > lock_distance)
+                        locked_idx = -1;
+                }
+
+                if (locked_idx != -1)
+                {
+                    double cx = boxes[locked_idx].x + boxes[locked_idx].width * 0.5;
+                    double cy = boxes[locked_idx].y + boxes[locked_idx].height * 0.5;
+                    target_lock_state.center = { cx, cy };
+                    target_lock_state.id = make_target_id(boxes[locked_idx], lock_grid);
+                    target_lock_state.lost_time = std::chrono::steady_clock::time_point{};
+                }
+                else
+                {
+                    if (target_lock_state.lost_time.time_since_epoch().count() == 0)
+                        target_lock_state.lost_time = now;
+
+                    double lost_for = std::chrono::duration<double>(now - target_lock_state.lost_time).count();
+                    if (lost_for >= reacquire_time)
+                        reset_target_lock();
+                    else
+                        lock_blocking = true;
+                }
+            }
+        }
+
+        std::vector<cv::Rect> locked_boxes;
+        std::vector<int> locked_classes;
+        const std::vector<cv::Rect>* boxes_ptr = &boxes;
+        const std::vector<int>* classes_ptr = &classes;
+
+        if (config.target_lock_enabled)
+        {
+            if (locked_idx != -1)
+            {
+                locked_boxes = { boxes[locked_idx] };
+                locked_classes = { classes[locked_idx] };
+                boxes_ptr = &locked_boxes;
+                classes_ptr = &locked_classes;
+            }
+            else if (lock_blocking)
+            {
+                boxes_ptr = nullptr;
+                classes_ptr = nullptr;
+            }
+        }
+
+        AimbotTarget* target = nullptr;
+        if (boxes_ptr && classes_ptr)
+        {
+            target = sortTargets(
+                *boxes_ptr,
+                *classes_ptr,
+                config.detection_resolution,
+                config.detection_resolution,
+                config.disable_headshot
+            );
+        }
 
         if (target)
         {
             mouseThread.setLastTargetTime(std::chrono::steady_clock::now());
             mouseThread.setTargetDetected(true);
+
+            if (config.target_lock_enabled)
+            {
+                const int lock_grid = 10;
+                cv::Rect target_box(static_cast<int>(target->x), static_cast<int>(target->y),
+                    static_cast<int>(target->w), static_cast<int>(target->h));
+                target_lock_state.active = true;
+                target_lock_state.id = make_target_id(target_box, lock_grid);
+                target_lock_state.center = { target->pivotX, target->pivotY };
+                target_lock_state.lost_time = std::chrono::steady_clock::time_point{};
+            }
 
             auto futurePositions = mouseThread.predictFuturePositions(
                 target->pivotX,
