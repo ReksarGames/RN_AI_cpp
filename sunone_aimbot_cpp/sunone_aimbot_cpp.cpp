@@ -9,6 +9,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 
 #include "capture.h"
@@ -56,6 +57,17 @@ std::atomic<bool> zooming(false);
 std::atomic<bool> shooting(false);
 std::atomic<bool> triggerbot_button(false);
 
+
+//ERRORS: '(': illegal token on right side of '::'
+//'exists': identifier not found
+//'exists' : identifier not found
+//'exists' : is not a member of 'std::filesystem'
+//'exists' : is not a member of 'std::filesystem'
+//'modelPath' uses undefined class 'std::filesystem::path'
+// namespace "std::filesystem" has no member "exists"
+//namespace "std::filesystem" has no member "exists"
+//syntax error : ')'
+//use of undefined type 'std::filesystem::path'
 void createInputDevices()
 {
     if (arduinoSerial)

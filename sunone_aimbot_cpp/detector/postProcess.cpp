@@ -63,7 +63,7 @@ void NMS(std::vector<Detection>& detections, float nmsThreshold, std::chrono::du
         float adaptiveThreshold = nmsThreshold;
         if (config.adaptive_nms && area_i > 0.0f && area_i < small_area_threshold)
         {
-            adaptiveThreshold = std::min(nmsThreshold * 1.5f, 0.8f);
+            adaptiveThreshold = (std::min)(nmsThreshold * 1.5f, 0.8f);
         }
 
         for (size_t j = i + 1; j < detections.size(); ++j)

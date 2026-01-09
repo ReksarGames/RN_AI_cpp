@@ -1,0 +1,816 @@
+{
+  "infer_debug": true,
+  "print_fps": true,
+  "show_motion_speed": true,
+  "km_box_vid": "9031",
+  "km_box_pid": "5586",
+  "km_net_ip": "127.0.0.1",
+  "km_net_port": "32838",
+  "km_net_uuid": "C0563CAB",
+  "dhz_ip": "127.0.0.1",
+  "dhz_port": 32838,
+  "dhz_random": 55,
+  "move_method": "send_input",
+  "is_curve": true,
+  "is_curve_uniform": false,
+  "is_show_curve": true,
+  "is_show_down": false,
+  "offset_boundary_x": 3,
+  "offset_boundary_y": 3,
+  "knots_count": 3,
+  "distortion_mean": 0.30000001192092896,
+  "distortion_st_dev": 0.30000001192092896,
+  "distortion_frequency": 0.30000001192092896,
+  "target_points": 3,
+  "distance_scoring_weight": 0.0,
+  "center_scoring_weight": 1.0,
+  "size_scoring_weight": 0.0,
+  "group": "DeltaForce",
+  "picked_game": "cs2",
+  "down_switch_key": "f5",
+  "is_obs": false,
+  "obs_ip": "0.0.0.0",
+  "obs_port": 5645,
+  "obs_fps": 240,
+  "is_cjk": false,
+  "cjk_device_id": 0,
+  "cjk_fps": 240,
+  "cjk_resolution": "2560x1440",
+  "cjk_crop_size": "512x512",
+  "mask_left": false,
+  "mask_right": false,
+  "mask_middle": false,
+  "mask_side1": false,
+  "mask_side2": false,
+  "mask_x": false,
+  "aim_mask_x": false,
+  "mask_y": false,
+  "aim_mask_y": false,
+  "mask_wheel": false,
+  "catbox_ip": "127.0.0.1",
+  "catbox_port": 32838,
+  "catbox_uuid": "00000000",
+  "km_com": "COM3",
+  "groups": {
+    "apex": {
+      "infer_model": "./weights/apex_dw_pro_max.data",
+      "auto_y": false,
+      "long_press_duration": 100,
+      "right_down": false,
+      "aim_keys": {
+        "mouse_left": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.8,
+          "aim_bot_position": 0.3,
+          "aim_bot_scope": 100,
+          "smoothing_factor": 0.6,
+          "base_step": 0.2,
+          "distance_weight": 0.4,
+          "fov_angle": 100,
+          "history_size": 10,
+          "output_scale_x": 1.0,
+          "output_scale_y": 0.5,
+          "deadzone": 2.0,
+          "uniform_threshold": 1.5,
+          "compensation_factor": 2.5,
+          "trigger": {
+            "status": false,
+            "start_delay": 150,
+            "press_delay": 1,
+            "end_delay": 200,
+            "random_delay": 20,
+            "x_trigger_scope": 0.4,
+            "y_trigger_scope": 0.9,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [0],
+          "min_position_offset": 3,
+          "min_velocity_threshold": 10,
+          "max_velocity_threshold": 100,
+          "class_aim_positions": {}
+        },
+        "mouse_x2": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.8,
+          "aim_bot_position": 0.3,
+          "aim_bot_scope": 150,
+          "smoothing_factor": 0.6,
+          "base_step": 0.2,
+          "distance_weight": 0.4,
+          "fov_angle": 100,
+          "history_size": 10,
+          "output_scale_x": 1.0,
+          "output_scale_y": 0.5,
+          "deadzone": 2.0,
+          "uniform_threshold": 1.5,
+          "compensation_factor": 2.5,
+          "trigger": {
+            "status": true,
+            "start_delay": 80,
+            "press_delay": 1,
+            "end_delay": 120,
+            "random_delay": 20,
+            "x_trigger_scope": 0.4,
+            "y_trigger_scope": 0.9,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [0],
+          "min_position_offset": 3,
+          "min_velocity_threshold": 10,
+          "max_velocity_threshold": 100,
+          "class_aim_positions": {}
+        }
+      },
+      "is_v8": false,
+      "is_trt": false
+    },
+    "cs2": {
+      "infer_model": "./weights/cs22.data",
+      "auto_y": true,
+      "long_press_duration": 100,
+      "right_down": false,
+      "aim_keys": {
+        "mouse_x2": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.5,
+          "aim_bot_position": 0.36,
+          "aim_bot_scope": 256,
+          "smoothing_factor": 0.0,
+          "base_step": 0.18,
+          "distance_weight": 0.0,
+          "fov_angle": 73,
+          "history_size": 0,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 0.0,
+          "uniform_threshold": 0.0,
+          "compensation_factor": 0.0,
+          "trigger": {
+            "status": true,
+            "start_delay": 35,
+            "press_delay": 20,
+            "end_delay": 0,
+            "random_delay": 0,
+            "x_trigger_scope": 1.0,
+            "y_trigger_scope": 1.0,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [2, 0],
+          "min_position_offset": 3,
+          "min_velocity_threshold": 0.0,
+          "max_velocity_threshold": 0.0,
+          "class_aim_positions": {}
+        },
+        "mouse_x1": {
+          "confidence_threshold": 0.2,
+          "iou_t": 0.2,
+          "aim_bot_position": 0.4,
+          "aim_bot_scope": 256,
+          "smoothing_factor": 0.0,
+          "base_step": 0.175,
+          "distance_weight": 0.0,
+          "fov_angle": 90,
+          "history_size": 0,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 0.0,
+          "uniform_threshold": 0.0,
+          "compensation_factor": 0.0,
+          "trigger": {
+            "status": true,
+            "start_delay": 35,
+            "press_delay": 20,
+            "end_delay": 20,
+            "random_delay": 20,
+            "x_trigger_scope": 1.0,
+            "y_trigger_scope": 1.0,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [3, 1],
+          "min_position_offset": 0,
+          "min_velocity_threshold": 0.0,
+          "max_velocity_threshold": 0.0,
+          "class_aim_positions": {}
+        }
+      },
+      "is_v8": false,
+      "is_trt": false
+    },
+    "cf": {
+      "infer_model": "./weights/cf_2.data",
+      "auto_y": false,
+      "long_press_duration": 100,
+      "right_down": false,
+      "aim_keys": {
+        "mouse_x2": {
+          "confidence_threshold": 0.3,
+          "iou_t": 0.5,
+          "aim_bot_position": 0.4,
+          "aim_bot_scope": 500,
+          "smoothing_factor": 0.0,
+          "base_step": 0.17,
+          "distance_weight": 0.0,
+          "fov_angle": 73,
+          "history_size": 0,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 0.0,
+          "uniform_threshold": 0.0,
+          "compensation_factor": 0.0,
+          "trigger": {
+            "status": true,
+            "start_delay": 20,
+            "press_delay": 70,
+            "end_delay": 100,
+            "random_delay": 20,
+            "x_trigger_scope": 1.0,
+            "y_trigger_scope": 1.0,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [0],
+          "min_position_offset": 0,
+          "min_velocity_threshold": 0.0,
+          "max_velocity_threshold": 0.0,
+          "class_aim_positions": {}
+        },
+        "mouse_x1": {
+          "confidence_threshold": 0.3,
+          "iou_t": 0.5,
+          "aim_bot_position": 0.5,
+          "aim_bot_scope": 500,
+          "smoothing_factor": 0.0,
+          "base_step": 0.17,
+          "distance_weight": 0.0,
+          "fov_angle": 73,
+          "history_size": 0,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 0.0,
+          "uniform_threshold": 0.0,
+          "compensation_factor": 0.0,
+          "trigger": {
+            "status": true,
+            "start_delay": 20,
+            "press_delay": 70,
+            "end_delay": 100,
+            "random_delay": 20,
+            "x_trigger_scope": 1.0,
+            "y_trigger_scope": 1.0,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [1],
+          "min_position_offset": 0,
+          "min_velocity_threshold": 0.0,
+          "max_velocity_threshold": 0.0,
+          "class_aim_positions": {}
+        }
+      },
+      "is_v8": false,
+      "is_trt": false
+    },
+    "valorant": {
+      "infer_model": "./weights/valo256.data",
+      "auto_y": false,
+      "long_press_duration": 100,
+      "right_down": false,
+      "aim_keys": {
+        "mouse_x2": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.5,
+          "aim_bot_position": 0.25,
+          "aim_bot_scope": 500,
+          "smoothing_factor": 0.0,
+          "base_step": 0.15,
+          "distance_weight": 0.0,
+          "fov_angle": 103,
+          "history_size": 0,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 0.0,
+          "uniform_threshold": 0.0,
+          "compensation_factor": 0.1,
+          "trigger": {
+            "status": true,
+            "start_delay": 15,
+            "press_delay": 110,
+            "end_delay": 20,
+            "random_delay": 20,
+            "x_trigger_scope": 1.0,
+            "y_trigger_scope": 1.0,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [0],
+          "min_position_offset": 0,
+          "min_velocity_threshold": 0.0,
+          "max_velocity_threshold": 0.0,
+          "class_aim_positions": {}
+        },
+        "mouse_x1": {
+          "confidence_threshold": 0.2,
+          "iou_t": 0.1,
+          "aim_bot_position": 0.08,
+          "aim_bot_scope": 500,
+          "smoothing_factor": 0.0,
+          "base_step": 0.14,
+          "distance_weight": 0.0,
+          "fov_angle": 103,
+          "history_size": 0,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 0.0,
+          "uniform_threshold": 0.0,
+          "compensation_factor": 0.0,
+          "trigger": {
+            "status": true,
+            "start_delay": 20,
+            "press_delay": 20,
+            "end_delay": 100,
+            "random_delay": 20,
+            "x_trigger_scope": 0.3500000536441803,
+            "y_trigger_scope": 0.12000053375959396,
+            "x_trigger_offset": 0.3099999725818634,
+            "y_trigger_offset": 0.019999999552965164
+          },
+          "classes": [0],
+          "min_position_offset": 0,
+          "min_velocity_threshold": 0.0,
+          "max_velocity_threshold": 0.0,
+          "class_aim_positions": {}
+        }
+      },
+      "is_v8": true,
+      "is_trt": false
+    },
+    "DeltaForce": {
+      "infer_model": "./weights/df_v5_16000_fh.data",
+      "auto_y": false,
+      "long_press_duration": 100,
+      "right_down": false,
+      "aim_keys": {
+        "mouse_right": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.8,
+          "aim_bot_position": 0.14,
+          "aim_bot_scope": 121,
+          "smoothing_factor": 0.5,
+          "base_step": 0.17,
+          "distance_weight": 5.0,
+          "fov_angle": 103,
+          "history_size": 20,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 2.0,
+          "uniform_threshold": 1.3,
+          "compensation_factor": 1.8,
+          "trigger": {
+            "status": false,
+            "start_delay": 150,
+            "press_delay": 1,
+            "end_delay": 200,
+            "random_delay": 20,
+            "x_trigger_scope": 0.6999998092651367,
+            "y_trigger_scope": 0.24000059068202972,
+            "x_trigger_offset": 0.13999998569488525,
+            "y_trigger_offset": 0.059999980032444,
+            "continuous": false,
+            "recoil": false
+          },
+          "classes": [0],
+          "min_position_offset": 3,
+          "min_velocity_threshold": 10,
+          "max_velocity_threshold": 100,
+          "class_aim_positions": {
+            "0": {
+              "aim_bot_position": 0.2,
+              "aim_bot_position2": 0.2,
+              "confidence_threshold": 0.5,
+              "iou_t": 0.8
+            },
+            "1": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "2": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "3": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "4": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            }
+          },
+          "class_priority_order": [0, 1, 2, 3, 4],
+          "overshoot_threshold": 3.0,
+          "overshoot_x_factor": 0.5,
+          "overshoot_y_factor": 0.3,
+          "move_deadzone": 0.5,
+          "pid_kp_y": 0.3,
+          "pid_kp_x": 0.4,
+          "dynamic_scope": {
+            "enabled": false
+          },
+          "pid_kd_y": 0.002,
+          "pid_kd_x": 0.002,
+          "smooth_algorithm": 60.0,
+          "smooth_deadzone": 7.0,
+          "pid_integral_limit_x": 1.0,
+          "pid_integral_limit_y": 0.8,
+          "smooth_x": 10.0,
+          "smooth_y": 10.0,
+          "pid_ki_x": 0.2,
+          "pid_ki_y": 0.0003
+        },
+        "dd": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.8,
+          "aim_bot_position": 0.14,
+          "aim_bot_scope": 122,
+          "smoothing_factor": 0.5,
+          "base_step": 0.17,
+          "distance_weight": 5.0,
+          "fov_angle": 103,
+          "history_size": 20,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 2.0,
+          "uniform_threshold": 1.3,
+          "compensation_factor": 1.8,
+          "trigger": {
+            "status": false,
+            "start_delay": 150,
+            "press_delay": 1,
+            "end_delay": 200,
+            "random_delay": 20,
+            "x_trigger_scope": 0.4,
+            "y_trigger_scope": 0.9,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [0],
+          "min_position_offset": 3,
+          "min_velocity_threshold": 10,
+          "max_velocity_threshold": 100,
+          "class_aim_positions": {
+            "0": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.1,
+              "iou_t": 1.0
+            },
+            "1": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "2": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "3": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "4": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            }
+          },
+          "class_priority_order": [0, 1, 2, 3, 4],
+          "overshoot_threshold": 3.0,
+          "overshoot_x_factor": 0.5,
+          "overshoot_y_factor": 0.3
+        },
+        "d": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.8,
+          "aim_bot_position": 0.14,
+          "aim_bot_scope": 122,
+          "smoothing_factor": 0.5,
+          "base_step": 0.17,
+          "distance_weight": 5.0,
+          "fov_angle": 103,
+          "history_size": 20,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 2.0,
+          "uniform_threshold": 1.3,
+          "compensation_factor": 1.8,
+          "trigger": {
+            "status": false,
+            "start_delay": 150,
+            "press_delay": 1,
+            "end_delay": 200,
+            "random_delay": 20,
+            "x_trigger_scope": 0.4,
+            "y_trigger_scope": 0.9,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [0],
+          "min_position_offset": 3,
+          "min_velocity_threshold": 10,
+          "max_velocity_threshold": 100,
+          "class_aim_positions": {
+            "0": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.1,
+              "iou_t": 1.0
+            },
+            "1": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "2": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "3": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            },
+            "4": {
+              "aim_bot_position": 0.0,
+              "aim_bot_position2": 0.0,
+              "confidence_threshold": 0.5,
+              "iou_t": 1.0
+            }
+          },
+          "class_priority_order": [0, 1, 2, 3, 4],
+          "overshoot_threshold": 3.0,
+          "overshoot_x_factor": 0.5,
+          "overshoot_y_factor": 0.3
+        }
+      },
+      "is_v8": false,
+      "is_trt": false
+    },
+    "mr": {
+      "infer_model": "./weights/mr_v3.data",
+      "auto_y": false,
+      "long_press_duration": 100,
+      "right_down": false,
+      "aim_keys": {
+        "mouse_left": {
+          "confidence_threshold": 0.2,
+          "iou_t": 0.8,
+          "aim_bot_position": 0.35,
+          "aim_bot_scope": 100,
+          "smoothing_factor": 0.6,
+          "base_step": 0.2,
+          "distance_weight": 0.4,
+          "fov_angle": 100,
+          "history_size": 10,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 2.0,
+          "uniform_threshold": 1.5,
+          "compensation_factor": 2.0,
+          "trigger": {
+            "status": false,
+            "start_delay": 150,
+            "press_delay": 1,
+            "end_delay": 200,
+            "random_delay": 20,
+            "x_trigger_scope": 0.4,
+            "y_trigger_scope": 0.9,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [0],
+          "min_position_offset": 3,
+          "min_velocity_threshold": 10,
+          "max_velocity_threshold": 100,
+          "class_aim_positions": {}
+        },
+        "mouse_x2": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.8,
+          "aim_bot_position": 0.35,
+          "aim_bot_scope": 100,
+          "smoothing_factor": 0.6,
+          "base_step": 0.2,
+          "distance_weight": 0.4,
+          "fov_angle": 100,
+          "history_size": 10,
+          "output_scale_x": 1.0,
+          "output_scale_y": 0.5,
+          "deadzone": 2.0,
+          "uniform_threshold": 1.5,
+          "compensation_factor": 2.5,
+          "trigger": {
+            "status": false,
+            "start_delay": 150,
+            "press_delay": 1,
+            "end_delay": 200,
+            "random_delay": 20,
+            "x_trigger_scope": 0.4,
+            "y_trigger_scope": 0.9,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [0],
+          "min_position_offset": 3,
+          "min_velocity_threshold": 10,
+          "max_velocity_threshold": 100,
+          "class_aim_positions": {}
+        }
+      },
+      "is_v8": false,
+      "is_trt": false
+    },
+    "Strinova": {
+      "infer_model": "D:\\Game\\Cheat\\Ai\\Model\\Strinova.onnx",
+      "auto_y": true,
+      "long_press_duration": 100,
+      "right_down": false,
+      "aim_keys": {
+        "mouse_x2": {
+          "confidence_threshold": 0.5,
+          "iou_t": 0.5,
+          "aim_bot_position": 0.6,
+          "aim_bot_scope": 500,
+          "smoothing_factor": 0.0,
+          "base_step": 0.18,
+          "distance_weight": 0.0,
+          "fov_angle": 103,
+          "history_size": 0,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 0.0,
+          "uniform_threshold": 0.0,
+          "compensation_factor": 0.0,
+          "trigger": {
+            "status": false,
+            "start_delay": 15,
+            "press_delay": 110,
+            "end_delay": 200,
+            "random_delay": 20,
+            "x_trigger_scope": 1.0,
+            "y_trigger_scope": 1.0,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [1],
+          "min_position_offset": 0,
+          "min_velocity_threshold": 0.0,
+          "max_velocity_threshold": 0.0,
+          "class_aim_positions": {}
+        },
+        "mouse_x1": {
+          "confidence_threshold": 0.3,
+          "iou_t": 0.5,
+          "aim_bot_position": 0.5,
+          "aim_bot_scope": 500,
+          "smoothing_factor": 0.1,
+          "base_step": 0.165,
+          "distance_weight": 0.0,
+          "fov_angle": 103,
+          "history_size": 0,
+          "output_scale_x": 1.0,
+          "output_scale_y": 1.0,
+          "deadzone": 0.0,
+          "uniform_threshold": 0.0,
+          "compensation_factor": 0.0,
+          "trigger": {
+            "status": true,
+            "start_delay": 15,
+            "press_delay": 20,
+            "end_delay": 120,
+            "random_delay": 20,
+            "x_trigger_scope": 1.0,
+            "y_trigger_scope": 1.0,
+            "x_trigger_offset": 0.0,
+            "y_trigger_offset": 0.0
+          },
+          "classes": [3],
+          "min_position_offset": 0,
+          "min_velocity_threshold": 0.0,
+          "max_velocity_threshold": 0.0,
+          "class_aim_positions": {}
+        }
+      },
+      "is_v8": false,
+      "is_trt": false,
+      "original_infer_model": "D:\\Game\\Cheat\\Ai\\Model\\Strinova.onnx"
+    }
+  },
+  "games": {
+    "valorant": {
+      "ak": [
+        {
+          "number": 2,
+          "offset": [0.0, 0.0]
+        },
+        {
+          "number": 100,
+          "offset": [0, 3.5]
+        }
+      ],
+      "m4": [
+        {
+          "number": 20,
+          "offset": [0, 0]
+        },
+        {
+          "number": 40,
+          "offset": [0, 2]
+        }
+      ]
+    },
+    "cs2": {
+      "akk": [
+        {
+          "number": 1111,
+          "offset": [0.0, 2.0]
+        },
+        {
+          "number": 40,
+          "offset": [0, 3]
+        }
+      ],
+      "m44": [
+        {
+          "number": 20,
+          "offset": [0, 0]
+        },
+        {
+          "number": 40,
+          "offset": [0, 1.5]
+        }
+      ]
+    }
+  },
+  "enable_parallel_processing": true,
+  "turbo_mode": true,
+  "skip_frame_processing": true,
+  "performance_mode": "balanced",
+  "use_async_move": false,
+  "frame_skip_ratio": 0,
+  "cpu_optimization": true,
+  "memory_optimization": true,
+  "auto_flashbang": {
+    "enabled": false,
+    "delay_ms": 150,
+    "turn_angle": 90,
+    "sensitivity_multiplier": 2.5,
+    "return_delay": 80,
+    "min_confidence": 0.3,
+    "min_size": 5,
+    "use_curve": true,
+    "curve_speed": 8.0,
+    "curve_knots": 3
+  },
+  "small_target_enhancement": {
+    "enabled": true,
+    "boost_factor": 0.09999968856573105,
+    "threshold": 0.01600000075995922,
+    "medium_threshold": 0.05,
+    "medium_boost": 1.5,
+    "smooth_enabled": true,
+    "smooth_frames": 2,
+    "adaptive_nms": true
+  },
+  "recoil": {
+    "use_mouse_re_trajectory": false,
+    "replay_speed": 1.0,
+    "pixel_enhancement_ratio": 1.0,
+    "mapping": {}
+  },
+  "screen_width": 2560,
+  "screen_height": 1440,
+  "show_fov": true,
+  "is_show_priority_debug": false
+}
