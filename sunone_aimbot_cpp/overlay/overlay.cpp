@@ -272,16 +272,6 @@ void OverlayThread()
         key_names_cstrs.push_back(name.c_str());
     }
 
-    int input_method_index = 0;
-    if (config.input_method == "WIN32")
-        input_method_index = 0;
-    else if (config.input_method == "GHUB")
-        input_method_index = 1;
-    else if (config.input_method == "ARDUINO")
-        input_method_index = 2;
-    else
-        input_method_index = 0;
-    
     std::vector<std::string> availableModels = getAvailableModels();
 
     MSG msg;

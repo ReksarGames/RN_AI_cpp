@@ -23,6 +23,30 @@ void NMS(std::vector<Detection>& detections, float nmsThreshold, std::chrono::du
         }
     );
 
+    if (config.max_detections > 0 &&
+        detections.size() > static_cast<size_t>(config.max_detections))
+    {
+        detections.resize(static_cast<size_t>(config.max_detections));
+    }
+
+    float small_area_threshold = 0.0f;
+    if (config.adaptive_nms && !detections.empty())
+    {
+        std::vector<float> areas;
+        areas.reserve(detections.size());
+        for (const auto& det : detections)
+        {
+            float area = static_cast<float>(det.box.area());
+            if (area < 0.0f) area = 0.0f;
+            areas.push_back(area);
+        }
+
+        size_t mid = areas.size() / 2;
+        std::nth_element(areas.begin(), areas.begin() + mid, areas.end());
+        float median_area = areas[mid];
+        small_area_threshold = median_area * 0.5f;
+    }
+
     std::vector<bool> suppress(detections.size(), false);
     std::vector<Detection> result;
     result.reserve(detections.size());
@@ -36,6 +60,12 @@ void NMS(std::vector<Detection>& detections, float nmsThreshold, std::chrono::du
         const cv::Rect& box_i = detections[i].box;
         const float area_i = static_cast<float>(box_i.area());
 
+        float adaptiveThreshold = nmsThreshold;
+        if (config.adaptive_nms && area_i > 0.0f && area_i < small_area_threshold)
+        {
+            adaptiveThreshold = std::min(nmsThreshold * 1.5f, 0.8f);
+        }
+
         for (size_t j = i + 1; j < detections.size(); ++j)
         {
             if (suppress[j]) continue;
@@ -48,7 +78,7 @@ void NMS(std::vector<Detection>& detections, float nmsThreshold, std::chrono::du
                 const float intersection_area = static_cast<float>(intersection.area());
                 const float union_area = area_i + static_cast<float>(box_j.area()) - intersection_area;
 
-                if (intersection_area / union_area > nmsThreshold)
+                if (intersection_area / union_area > adaptiveThreshold)
                 {
                     suppress[j] = true;
                 }

@@ -296,11 +296,11 @@ void TrtDetector::initialize(const std::string& modelFile)
         }
     }
 
-    img_scale = static_cast<float>(config.detection_resolution) / 640;
     nvinfer1::Dims dims = context->getTensorShape(inputName.c_str());
     int c = dims.d[1];
     int h = dims.d[2];
     int w = dims.d[3];
+    img_scale = static_cast<float>(config.detection_resolution) / std::max(1, w);
     resizedBuffer.create(h, w, CV_8UC3);
     floatBuffer.create(h, w, CV_32FC3);
     channelBuffers.resize(c);
@@ -579,6 +579,12 @@ std::vector<std::vector<Detection>> TrtDetector::detectBatch(const std::vector<c
     {
         cv::Mat resized;
         cv::resize(frames[b], resized, cv::Size(w, h));
+        if (resized.channels() == 4)
+            cv::cvtColor(resized, resized, cv::COLOR_BGRA2RGB);
+        else if (resized.channels() == 1)
+            cv::cvtColor(resized, resized, cv::COLOR_GRAY2RGB);
+        else
+            cv::cvtColor(resized, resized, cv::COLOR_BGR2RGB);
         resized.convertTo(resized, CV_32FC3, 1.0 / 255.0);
         std::vector<cv::Mat> channels;
         cv::split(resized, channels);
@@ -663,9 +669,11 @@ void TrtDetector::preProcess(const cv::Mat& frame)
     gpuFrame.upload(frame);
 
     if (frame.channels() == 4)
-        cv::cuda::cvtColor(gpuFrame, gpuFrame, cv::COLOR_BGRA2BGR);
+        cv::cuda::cvtColor(gpuFrame, gpuFrame, cv::COLOR_BGRA2RGB);
     else if (frame.channels() == 1)
-        cv::cuda::cvtColor(gpuFrame, gpuFrame, cv::COLOR_GRAY2BGR);
+        cv::cuda::cvtColor(gpuFrame, gpuFrame, cv::COLOR_GRAY2RGB);
+    else
+        cv::cuda::cvtColor(gpuFrame, gpuFrame, cv::COLOR_BGR2RGB);
 
     cv::cuda::resize(gpuFrame, gpuResized, cv::Size(w, h));
     gpuResized.convertTo(gpuFloat, CV_32FC3, 1.0 / 255.0);

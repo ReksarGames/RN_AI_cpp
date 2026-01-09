@@ -7,7 +7,6 @@
 #include <iostream>
 #include <filesystem>
 #include <algorithm>
-#include <fstream>
 #include <cstdlib>
 #include <unordered_set>
 #include <tchar.h>
@@ -282,22 +281,6 @@ bool LoadTextureFromMemory(const std::string& imageBase64, ID3D11Device* device,
     stbi_image_free(image_data);
 
     return true;
-}
-
-std::string get_ghub_version()
-{
-    std::string line;
-    std::ifstream in("C:\\Program Files\\LGHUB\\version");
-    if (in.is_open())
-    {
-        while (std::getline(in, line)) { }
-    }
-    in.close();
-
-    if (line.data())
-    {
-        return line;
-    }
 }
 
 bool contains_tensorrt(const std::string& path)

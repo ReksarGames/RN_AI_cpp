@@ -92,10 +92,6 @@ bool Config::loadConfig(const std::string& filename)
         speedCurveExponent = 3.0f;
         snapBoostFactor = 1.15f; 
 
-        // HID
-        hid_vid = 0x1956;
-        hid_pid = 0x3001;
-
         easynorecoil = false;
         easynorecoilstrength = 0.0f;
         input_method = "WIN32";
@@ -136,6 +132,7 @@ bool Config::loadConfig(const std::string& filename)
 
         confidence_threshold = 0.10f;
         nms_threshold = 0.50f;
+        adaptive_nms = true;
         max_detections = 100;
 
         postprocess = "yolo10";
@@ -439,6 +436,7 @@ bool Config::loadConfig(const std::string& filename)
 #endif
     confidence_threshold = (float)get_double("confidence_threshold", 0.15);
     nms_threshold = (float)get_double("nms_threshold", 0.50);
+    adaptive_nms = get_bool("adaptive_nms", true);
     max_detections = get_long("max_detections", 20);
 
     postprocess = get_string("postprocess", "yolo10");
@@ -563,7 +561,7 @@ bool Config::saveConfig(const std::string& filename)
         << std::fixed << std::setprecision(1)
         << "easynorecoilstrength = " << easynorecoilstrength << "\n"
 
-        << "# WIN32, GHUB, ARDUINO, KMBOX_B, KMBOX_NET\n"
+        << "# WIN32, ARDUINO, MAKCU, KMBOX_B, KMBOX_NET\n"
         << "input_method = " << input_method << "\n\n";
 
     // Wind mouse
@@ -573,11 +571,6 @@ bool Config::saveConfig(const std::string& filename)
         << "wind_W = " << wind_W << "\n"
         << "wind_M = " << wind_M << "\n"
         << "wind_D = " << wind_D << "\n\n";
-
-    // HID
-    file << "# HID\n"
-        << "hid_vid = 0x1956\n"
-        << "hid_pid = 0x3001\n\n";
 
     // kmbox_B
     file << "# Kmbox_B\n"
@@ -604,6 +597,7 @@ bool Config::saveConfig(const std::string& filename)
         << std::fixed << std::setprecision(2)
         << "confidence_threshold = " << confidence_threshold << "\n"
         << "nms_threshold = " << nms_threshold << "\n"
+        << "adaptive_nms = " << (adaptive_nms ? "true" : "false") << "\n"
         << std::setprecision(0)
         << "max_detections = " << max_detections << "\n"
         << "postprocess = " << postprocess << "\n"

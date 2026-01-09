@@ -3,16 +3,12 @@
 #include <winsock2.h>
 #include <Windows.h>
 
-#include <shellapi.h>
-
 #include "imgui/imgui.h"
 #include <imgui_internal.h>
 
 #include "sunone_aimbot_cpp.h"
 #include "include/other_tools.h"
 #include "kmbox_net/picture.h"
-
-std::string ghub_version = get_ghub_version();
 
 int prev_fovX = config.fovX;
 int prev_fovY = config.fovY;
@@ -417,7 +413,7 @@ void draw_mouse()
     ImGui::Checkbox("Auto Shoot", &config.auto_shoot);
     if (config.auto_shoot)
     {
-        ImGui::SliderFloat("bScope Multiplier", &config.bScope_multiplier, 0.5f, 2.0f, "%.1f");
+        ImGui::SliderFloat("bScope Multiplier", &config.bScope_multiplier, 0.2f, 2.0f, "%.1f");
     }
 
     ImGui::SeparatorText("Triggerbot");
@@ -486,7 +482,7 @@ void draw_mouse()
     }
 
     ImGui::SeparatorText("Input method");
-    std::vector<std::string> input_methods = { "MAKCU", "HID", "ARDUINO_HID", "KMBOX_B", "ARDUINO"};
+    std::vector<std::string> input_methods = { "MAKCU", "KMBOX_B", "ARDUINO" };
 
     std::vector<const char*> method_items;
     method_items.reserve(input_methods.size());
@@ -540,24 +536,6 @@ void draw_mouse()
         }
     }
 
-
-    else if (config.input_method == "HID")
-    {
-        if (hid && hid->isOpen())
-            ImGui::TextColored(ImVec4(0, 255, 0, 255), "Arduino (HID) connected");
-        else
-            ImGui::TextColored(ImVec4(255, 0, 0, 255), "Arduino (HID) not connected");
-
-    }
-
-    else if (config.input_method == "ARDUINO_HID")
-    {
-        if (arduinoHid && arduinoHid->isOpen())
-            ImGui::TextColored(ImVec4(0, 255, 0, 255), "Arduino (RawHID) connected");
-        else
-            ImGui::TextColored(ImVec4(255, 0, 0, 255), "Arduino (RawHID) not connected");
-
-    }
 
     if (config.input_method == "ARDUINO")
     {
@@ -645,33 +623,9 @@ void draw_mouse()
             input_method_changed.store(true);
         }
     }
-    else if (config.input_method == "GHUB")
-    {
-        if (ghub_version == "13.1.4")
-        {
-            std::string ghub_version_label = "The correct version of Ghub is installed: " + ghub_version;
-            ImGui::Text(ghub_version_label.c_str());
-        }
-        else
-        {
-            if (ghub_version == "")
-            {
-                ghub_version = "unknown";
-            }
-
-            std::string ghub_version_label = "Installed Ghub version: " + ghub_version;
-            ImGui::Text(ghub_version_label.c_str());
-            ImGui::Text("The wrong version of Ghub is installed or the path to Ghub is not set by default.\nDefault system path: C:\\Program Files\\LGHUB");
-            if (ImGui::Button("GHub Docs"))
-            {
-                ShellExecute(0, 0, L"https://github.com/SunOner/sunone_aimbot_docs/blob/main/tips/ghub.md", 0, 0, SW_SHOW);
-            }
-        }
-        ImGui::TextColored(ImVec4(255, 0, 0, 255), "Use at your own risk, the method is detected in some games.");
-    }
     else if (config.input_method == "WIN32")
     {
-        ImGui::TextColored(ImVec4(255, 255, 255, 255), "This is a standard mouse input method, it may not work in most games. Use GHUB or ARDUINO.");
+        ImGui::TextColored(ImVec4(255, 255, 255, 255), "This is a standard mouse input method, it may not work in most games. Use ARDUINO or KMBOX.");
         ImGui::TextColored(ImVec4(255, 0, 0, 255), "Use at your own risk, the method is detected in some games.");
     }
     else if (config.input_method == "KMBOX_B")

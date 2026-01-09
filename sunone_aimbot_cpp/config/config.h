@@ -58,7 +58,7 @@ public:
 
     bool easynorecoil;
     float easynorecoilstrength;
-    std::string input_method; // "WIN32", "GHUB", "ARDUINO", "KMBOX_B", "KMBOX_NET"
+    std::string input_method; // "WIN32", "ARDUINO", "MAKCU", "KMBOX_B", "KMBOX_NET"
 
     // Wind mouse
     bool wind_mouse_enabled;
@@ -76,10 +76,6 @@ public:
     // Makcu 
     std::string makcu_port;  
     int makcu_baudrate;     
-
-    // HID
-    uint16_t hid_vid;
-    uint16_t hid_pid;
 
     // kmbox_b
     int kmbox_b_baudrate;
@@ -105,6 +101,7 @@ public:
     std::string ai_model;
     float confidence_threshold;
     float nms_threshold;
+    bool adaptive_nms;
     int max_detections;
     std::string postprocess;
     int batch_size;

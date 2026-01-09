@@ -14,7 +14,6 @@
 #include "sunone_aimbot_cpp.h"
 #include "keyboard_listener.h"
 #include "overlay.h"
-#include "ghub.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
 
@@ -28,9 +27,6 @@ std::mutex configMutex;
 TrtDetector trt_detector;
 #endif
 
-#define ARDUINO_VID 0x1956
-#define ARDUINO_PID 0x3001
-#define PING_CODE 0xf9
 
 DirectMLDetector* dml_detector = nullptr;
 MouseThread* globalMouseThread = nullptr;
@@ -39,13 +35,10 @@ Config config;
 ColorDetector* color_detector = nullptr;
 std::thread color_detThread;
 
-GhubMouse* gHub = nullptr;
 SerialConnection* arduinoSerial = nullptr;
 KmboxConnection* kmboxSerial = nullptr;
 KmboxNetConnection* kmboxNetSerial = nullptr;
 MakcuConnection* makcu = nullptr;
-HIDConnection* hid = nullptr;
-HidConnectionV2* arduinoHid = nullptr;
 
 std::atomic<bool> detection_resolution_changed(false);
 std::atomic<bool> capture_method_changed(false);
@@ -69,13 +62,6 @@ void createInputDevices()
         arduinoSerial = nullptr;
     }
 
-    if (gHub)
-    {
-        gHub->mouse_close();
-        delete gHub;
-        gHub = nullptr;
-    }
-
     if (kmboxSerial)
     {
         delete kmboxSerial;
@@ -94,33 +80,10 @@ void createInputDevices()
         kmboxNetSerial = nullptr;
     }
 
-    if (hid)
-    {
-        delete hid;
-        hid = nullptr;
-    }
-
-    if (arduinoHid)
-    {
-        delete arduinoHid;
-        arduinoHid = nullptr;
-    }
-
     if (config.input_method == "ARDUINO")
     {
         std::cout << "[Mouse] Using Arduino method input." << std::endl;
         arduinoSerial = new SerialConnection(config.arduino_port, config.arduino_baudrate);
-    }
-    else if (config.input_method == "GHUB")
-    {
-        std::cout << "[Mouse] Using Ghub method input." << std::endl;
-        gHub = new GhubMouse();
-        if (!gHub->mouse_xy(0, 0))
-        {
-            std::cerr << "[Ghub] Error with opening mouse." << std::endl;
-            delete gHub;
-            gHub = nullptr;
-        }
     }
     else if (config.input_method == "KMBOX_B")
     {
@@ -154,28 +117,6 @@ void createInputDevices()
             makcu = nullptr;
         }
     }
-    else if (config.input_method == "HID")
-    {
-        std::cout << "[Mouse] Using HID method input." << std::endl;
-        hid = new HIDConnection(ARDUINO_VID, ARDUINO_PID);
-        if (!hid->isOpen())
-        {
-            std::cerr << "[HID] Error connecting to HID device." << std::endl;
-            delete hid;
-            hid = nullptr;
-        }
-    }
-    else if (config.input_method == "ARDUINO_HID")
-    {
-        std::cout << "[Mouse] Using Arduino (RawHID) input.\n";
-        arduinoHid = new HidConnectionV2(ARDUINO_VID, ARDUINO_PID);
-        if (!arduinoHid->isOpen())
-        {
-            std::cerr << "[HID] Error opening RawHID device.\n";
-            delete arduinoHid;
-            arduinoHid = nullptr;
-        }
-    }
     else
     {
         std::cout << "[Mouse] Using default Win32 method input." << std::endl;
@@ -188,12 +129,9 @@ void assignInputDevices()
     if (globalMouseThread)
     {
         globalMouseThread->setSerialConnection(arduinoSerial);
-        globalMouseThread->setGHubMouse(gHub);
         globalMouseThread->setKmboxConnection(kmboxSerial);
         globalMouseThread->setKmboxNetConnection(kmboxNetSerial);
-        globalMouseThread->setHidConnection(hid);
         globalMouseThread->setMakcuConnection(makcu);
-        globalMouseThread->setHidConnectionV2(arduinoHid);
     }
 }
 
@@ -208,21 +146,9 @@ void handleEasyNoRecoil(MouseThread& mouseThread)
         {
             makcu->move(0, recoil_compensation);
         }
-        else if (hid)
-        {
-            hid->move(0, recoil_compensation);
-        }
-        else if (arduinoHid)
-        {
-            arduinoHid->move(0, recoil_compensation);
-        }
         else if (arduinoSerial)
         {
             arduinoSerial->move(0, recoil_compensation);
-        }
-        else if (gHub)
-        {
-            gHub->mouse_xy(0, recoil_compensation);
         }
         else if (kmboxSerial)
         {
@@ -561,12 +487,9 @@ int main()
             config.bScope_multiplier,
             config.triggerbot_bScope_multiplier,
             arduinoSerial,
-            gHub,
             kmboxSerial,
             kmboxNetSerial,
-            makcu,
-            hid,
-            arduinoHid
+            makcu
         );
 
         mouseThread.setUseSmoothing(config.use_smoothing);
@@ -684,24 +607,6 @@ int main()
         {
             delete makcu;
             makcu = nullptr;
-        }
-
-        if (hid)
-        {
-            delete hid;
-            hid = nullptr;
-        }
-        
-        if (arduinoHid)
-        {
-            delete arduinoHid;
-            arduinoHid = nullptr;
-        }
-
-        if (gHub)
-        {
-            gHub->mouse_close();
-            delete gHub;
         }
 
         if (dml_detector)

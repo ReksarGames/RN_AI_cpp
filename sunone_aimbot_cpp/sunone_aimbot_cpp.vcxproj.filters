@@ -4,7 +4,6 @@
     <ClCompile Include="scr\other_tools.cpp" />
     <ClCompile Include="capture\capture.cpp" />
     <ClCompile Include="overlay\overlay.cpp" />
-    <ClCompile Include="mouse\ghub.cpp" />
     <ClCompile Include="mouse\mouse.cpp" />
     <ClCompile Include="mouse\SerialConnection.cpp" />
     <ClCompile Include="mouse\AimbotTarget.cpp" />
@@ -38,10 +37,6 @@
     <ClCompile Include="mouse\kmbox_net\kmboxNet.cpp" />
     <ClCompile Include="mouse\kmboxNetConnection.cpp" />
     <ClCompile Include="mouse\MakcuConnection.cpp" />
-    <ClCompile Include="mouse\HID\MouseInstruct.cpp" />
-    <ClCompile Include="mouse\HID\AbstractMouse.cpp" />
-    <ClCompile Include="mouse\HID\HIDConnection.cpp" />
-    <ClCompile Include="mouse\HID\HIDConnectionV2.cpp" />
     <ClCompile Include="detector\trt_detector.cpp" />
     <ClCompile Include="detector\color_detector.cpp" />
   </ItemGroup>
@@ -58,7 +53,6 @@
     <ClInclude Include="include\memory_images.h" />
     <ClInclude Include="capture\capture.h" />
     <ClInclude Include="overlay\overlay.h" />
-    <ClInclude Include="mouse\ghub.h" />
     <ClInclude Include="mouse\mouse.h" />
     <ClInclude Include="mouse\SerialConnection.h" />
     <ClInclude Include="mouse\AimbotTarget.h" />
@@ -90,11 +84,6 @@
     <ClInclude Include="mouse\kmbox_net\picture.h" />
     <ClInclude Include="mouse\kmboxNetConnection.h" />
     <ClInclude Include="mouse\MakcuConnection.h" />
-    <ClInclude Include="mouse\HID\HIDConnection.h" />
-    <ClInclude Include="mouse\HIDConnection.h" />
-    <ClInclude Include="mouse\HID\MouseInstruct.h" />
-    <ClInclude Include="mouse\HID\AbstractMouse.h" />
-    <ClInclude Include="mouse\HID\HIDConnectionV2.h" />
     <ClInclude Include="detector\fused_preprocess.h" />
     <ClInclude Include="detector\trt_detector.h" />
     <ClInclude Include="detector\color_detector.h" />

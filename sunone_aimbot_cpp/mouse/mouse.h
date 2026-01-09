@@ -21,10 +21,7 @@
 #include "SerialConnection.h"
 #include "Kmbox_b.h"
 #include "KmboxNetConnection.h"
-#include "ghub.h"
 #include "MakcuConnection.h"
-#include "HID/HIDConnection.h"
-#include "HID/HIDConnectionV2.h"
 
 class MouseThread
 {
@@ -52,10 +49,7 @@ private:
     SerialConnection* serial;
     KmboxConnection* kmbox;
     KmboxNetConnection* kmbox_net;
-    GhubMouse* gHub;
     MakcuConnection* makcu;
-    HIDConnection* hid;
-    HidConnectionV2* arduinoHid;
 
     // Отправка движений
     void sendMovementToDriver(int dx, int dy);
@@ -145,12 +139,9 @@ public:
         float bScope_multiplier,
         float triggerbot_bScope_multiplier,
         SerialConnection* serialConnection = nullptr,
-        GhubMouse* gHubMouse = nullptr,
         KmboxConnection* kmboxConnection = nullptr,
         KmboxNetConnection* kmboxNetConnection = nullptr,
-        MakcuConnection* makcu = nullptr,
-        HIDConnection* hid = nullptr,
-        HidConnectionV2* arduinoHid = nullptr
+        MakcuConnection* makcu = nullptr
     );
     ~MouseThread();
 
@@ -200,10 +191,7 @@ public:
     void setSerialConnection(SerialConnection* s);
     void setKmboxConnection(KmboxConnection* k);
     void setKmboxNetConnection(KmboxNetConnection* k);
-    void setGHubMouse(GhubMouse* g);
-    void setHidConnection(HIDConnection* h);
     void setMakcuConnection(MakcuConnection* m);
-    void setHidConnectionV2(HidConnectionV2* a);
 
     // Smooth
     void setSmoothnessValue(int value) { smoothness = value; }

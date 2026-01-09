@@ -35,11 +35,6 @@
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="keyboard\keyboard_listener.cpp" />
     <ClCompile Include="keyboard\keycodes.cpp" />
-    <ClCompile Include="mouse\ghub.cpp" />
-    <ClCompile Include="mouse\HID\AbstractMouse.cpp" />
-    <ClCompile Include="mouse\HID\HIDConnection.cpp" />
-    <ClCompile Include="mouse\HID\HIDConnectionV2.cpp" />
-    <ClCompile Include="mouse\HID\MouseInstruct.cpp" />
     <ClCompile Include="mouse\kmboxNetConnection.cpp" />
     <ClCompile Include="mouse\Kmbox_b.cpp" />
     <ClCompile Include="mouse\kmbox_net\kmboxNet.cpp" />
@@ -89,12 +84,6 @@
     <ClInclude Include="include\other_tools.h" />
     <ClInclude Include="keyboard\keyboard_listener.h" />
     <ClInclude Include="keyboard\keycodes.h" />
-    <ClInclude Include="mouse\ghub.h" />
-    <ClInclude Include="mouse\HID\HIDConnection.h" />
-    <ClInclude Include="mouse\HID\AbstractMouse.h" />
-    <ClInclude Include="mouse\HIDConnection.h" />
-    <ClInclude Include="mouse\HID\HIDConnectionV2.h" />
-    <ClInclude Include="mouse\HID\MouseInstruct.h" />
     <ClInclude Include="mouse\kmboxNetConnection.h" />
     <ClInclude Include="mouse\Kmbox_b.h" />
     <ClInclude Include="mouse\kmbox_net\HidTable.h" />
@@ -193,7 +182,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>opencv_world4100.lib;nvinfer_10.lib;nvonnxparser_10.lib;WindowsApp.lib;d3d11.lib;dxgi.lib;d2d1.lib;cuda.lib;cudart.lib;glfw3_mt.lib;glfw3dll.lib;serial.lib;hid.lib;hidapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opencv_world4100.lib;nvinfer_10.lib;nvonnxparser_10.lib;WindowsApp.lib;d3d11.lib;dxgi.lib;d2d1.lib;cuda.lib;cudart.lib;glfw3_mt.lib;glfw3dll.lib;serial.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>E:\sunone_aimbot_cpp\sunone_aimbot_cpp\modules\opencv\build\install\include\opencv2;E:\sunone_aimbot_cpp\sunone_aimbot_cpp\modules\opencv\build\install\x64\vc17\lib;E:\sunone_aimbot_cpp\sunone_aimbot_cpp\modules\opencv\build\install\x64\vc17\bin;E:\sunone_aimbot_cpp\sunone_aimbot_cpp\modules\vcpkg-master\installed\x64-windows\lib;E:\sunone_aimbot_cpp\sunone_aimbot_cpp\modules;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
@@ -211,7 +200,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\include;$(MSBuildProjectDirectory)\modules\stb;$(MSBuildProjectDirectory)\modules\imgui-1.91.2\backends;$(MSBuildProjectDirectory)\modules\imgui-1.91.2;C:\Program Files %28x86%29\Microsoft\hidapi\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\modules\glfw-3.4.bin.WIN64\include;$(MSBuildProjectDirectory)\modules\stb;$(MSBuildProjectDirectory)\modules\imgui-1.91.2\backends;$(MSBuildProjectDirectory)\modules\imgui-1.91.2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
@@ -223,8 +212,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>opencv_world4100.lib;WindowsApp.lib;d3d11.lib;dxgi.lib;d2d1.lib;glfw3_mt.lib;glfw3dll.lib;serial.lib;hid.lib;hidapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>E:\sunone_aimbot_cpp\sunone_aimbot_cpp\modules;C:\Program Files %28x86%29\Microsoft\hidapi\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>opencv_world4100.lib;WindowsApp.lib;d3d11.lib;dxgi.lib;d2d1.lib;glfw3_mt.lib;glfw3dll.lib;serial.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>E:\sunone_aimbot_cpp\sunone_aimbot_cpp\modules;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <Manifest>
       <GenerateCatalogFiles>false</GenerateCatalogFiles>

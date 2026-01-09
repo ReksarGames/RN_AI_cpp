@@ -22,7 +22,6 @@ std::string intToString(int value);
 bool LoadTextureFromFile(const char* filename, ID3D11Device* device, ID3D11ShaderResourceView** out_srv, int* out_width, int* out_height);
 bool LoadTextureFromMemory(const std::string& imageBase64, ID3D11Device* device, ID3D11ShaderResourceView** out_srv, int* out_width, int* out_height);
 
-std::string get_ghub_version();
 int get_active_monitors();
 HMONITOR GetMonitorHandleByIndex(int monitorIndex);
 

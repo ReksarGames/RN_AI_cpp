@@ -15,7 +15,6 @@
 #include "capture.h"
 #include "SerialConnection.h"
 #include "sunone_aimbot_cpp.h"
-#include "ghub.h"
 
 MouseThread::MouseThread(
     int resolution,
@@ -28,10 +27,9 @@ MouseThread::MouseThread(
     float bScope_multiplier,
     float triggerbot_bScope_multiplier,
     SerialConnection* serialConnection,
-    GhubMouse* gHubMouse,
     KmboxConnection* kmboxConnection,
     KmboxNetConnection* Kmbox_Net_Connection,
-    MakcuConnection* makcu, HIDConnection* hid, HidConnectionV2* arduinoHid)
+    MakcuConnection* makcu)
     : screen_width(resolution),
     screen_height(resolution),
     prediction_interval(predictionInterval),
@@ -48,10 +46,7 @@ MouseThread::MouseThread(
     serial(serialConnection),
     kmbox(kmboxConnection),
     kmbox_net(Kmbox_Net_Connection),
-    gHub(gHubMouse),
     makcu(makcu),
-    hid(hid),
-    arduinoHid(arduinoHid),
 
     prev_velocity_x(0.0),
     prev_velocity_y(0.0),
@@ -254,14 +249,6 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
     {
         makcu->move(dx, dy);
     }
-    else if (hid)
-    {
-        hid->move(dx, dy);
-    }
-    else if (arduinoHid)
-    {
-        arduinoHid->move(dx, dy);
-    }
     else if (kmbox)
     {
         kmbox->move(dx, dy);
@@ -273,10 +260,6 @@ void MouseThread::sendMovementToDriver(int dx, int dy)
     else if (serial)
     {
         serial->move(dx, dy);
-    }
-    else if (gHub)
-    {
-        gHub->mouse_xy(dx, dy);
     }
     else
     {
@@ -358,14 +341,6 @@ void MouseThread::pressMouse(const AimbotTarget& target, float scope_multiplier)
         {
             makcu->press(0);
         }
-        else if (hid)
-        {
-            hid->press();
-        }
-        else if (arduinoHid)
-        {
-            arduinoHid->press();
-        }
         else if (kmbox)
         {
             kmbox->press(0);
@@ -378,10 +353,6 @@ void MouseThread::pressMouse(const AimbotTarget& target, float scope_multiplier)
         {
             serial->press();
         }
-        else if (gHub)
-        {
-            gHub->mouse_down();
-        }
         else
         {
             INPUT input = { 0 };
@@ -393,17 +364,9 @@ void MouseThread::pressMouse(const AimbotTarget& target, float scope_multiplier)
     }
     else if (!bScope && mouse_pressed)
     {
-        if (hid)
-        {
-            hid->release();
-        }
-        else if (makcu)
+        if (makcu)
         {
             makcu->release(0);
-        }
-        else if (arduinoHid)
-        {
-            arduinoHid->release();
         }
         else if (kmbox)
         {
@@ -416,10 +379,6 @@ void MouseThread::pressMouse(const AimbotTarget& target, float scope_multiplier)
         else if (serial)
         {
             serial->release();
-        }
-        else if (gHub)
-        {
-            gHub->mouse_up();
         }
         else
         {
@@ -438,17 +397,9 @@ void MouseThread::releaseMouse()
 
     if (mouse_pressed)
     {
-        if (hid)
-        {
-            hid->release();
-        }
-        else if (makcu)
+        if (makcu)
         {
             makcu->release(0);
-        }
-        else if (arduinoHid)
-        {
-            arduinoHid->release();
         }
         else if (kmbox)
         {
@@ -461,10 +412,6 @@ void MouseThread::releaseMouse()
         else if (serial)
         {
             serial->release();
-        }
-        else if (gHub)
-        {
-            gHub->mouse_up();
         }
         else
         {
@@ -566,26 +513,10 @@ void MouseThread::setKmboxNetConnection(KmboxNetConnection* newKmbox_net)
     kmbox_net = newKmbox_net;
 }
 
-void MouseThread::setGHubMouse(GhubMouse* newGHub)
-{
-    std::lock_guard<std::mutex> lock(input_method_mutex);
-    gHub = newGHub;
-}
-
-void MouseThread::setHidConnection(HIDConnection* newHid)
-{
-    std::lock_guard<std::mutex> lock(input_method_mutex);
-    hid = newHid;
-}
 void MouseThread::setMakcuConnection(MakcuConnection* newMakcu)
 {
     std::lock_guard<std::mutex> lock(   input_method_mutex);
     makcu = newMakcu;
-}
-void MouseThread::setHidConnectionV2(HidConnectionV2* newArduinoHid)
-{
-    std::lock_guard<std::mutex> lock(input_method_mutex);
-    arduinoHid = newArduinoHid;
 }
 // Kalma 
 void MouseThread::moveMouseWithKalman(double targetX, double targetY) {

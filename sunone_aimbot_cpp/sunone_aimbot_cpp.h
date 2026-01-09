@@ -14,8 +14,6 @@
 #include "Kmbox_b.h"
 #include "KmboxNetConnection.h"
 #include "MakcuConnection.h"
-#include "HID/HIDConnection.h"
-#include "HID/HIDConnectionV2.h"
 #include "color_detector.h"
 
 extern Config config;
@@ -28,9 +26,7 @@ extern MouseThread* globalMouseThread;
 extern SerialConnection* arduinoSerial;
 extern KmboxConnection* kmboxSerial;
 extern KmboxNetConnection* kmboxNetSerial;
-extern HIDConnection* hid;
 extern MakcuConnection* makcu;
-extern HidConnectionV2* arduinoHid;
 extern ColorDetector* color_detector;
 
 extern std::atomic<bool> input_method_changed;
