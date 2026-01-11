@@ -50,6 +50,8 @@ private:
     std::unique_ptr<nvinfer1::IExecutionContext> context;
 
     cudaStream_t stream;
+    cudaEvent_t inferStartEvent;
+    cudaEvent_t inferEndEvent;
 
     bool useCudaGraph;
     bool cudaGraphCaptured;
@@ -96,9 +98,8 @@ private:
     std::unordered_map<std::string, std::vector<__half>> outputDataBuffersHalf;
     std::unordered_map<std::string, nvinfer1::DataType> outputTypes;
 
-    cv::cuda::GpuMat resizedBuffer;
-    cv::cuda::GpuMat floatBuffer;
-    std::vector<cv::cuda::GpuMat> channelBuffers;
+    cv::cuda::GpuMat gpuFrame;
+    cv::cuda::GpuMat gpuBgr;
 };
 
 #endif // TRT_DETECTOR_H
