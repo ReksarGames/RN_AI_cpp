@@ -335,6 +335,13 @@ void OverlayThread()
                         ImGui::EndTabItem();
                     }
 
+                    if (ImGui::BeginTabItem("Classes"))
+                    {
+                        draw_classes();
+
+                        ImGui::EndTabItem();
+                    }
+
                     if (ImGui::BeginTabItem("Mouse"))
                     {
                         draw_mouse();

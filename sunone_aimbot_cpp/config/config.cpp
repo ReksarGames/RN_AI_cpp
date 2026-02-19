@@ -8,6 +8,8 @@
 #include <string>
 #include <filesystem>
 #include <unordered_map>
+#include <algorithm>
+#include <cctype>
 
 #include "config.h"
 #include "modules/SimpleIni.h"
@@ -69,6 +71,28 @@ bool Config::loadConfig(const std::string& filename)
         target_lock_enabled = false;
         target_lock_distance = 100.0f;
         target_lock_reacquire_time = 0.30f;
+        smart_target_lock = true;
+        target_reference_class = 0;
+        target_lock_fallback_class = -1;
+        target_switch_delay = 0;
+        aim_bot_scope = 160.0f;
+        aim_bot_position = 0.5f;
+        aim_bot_position2 = 0.5f;
+        allowed_classes = "";
+        class_priority_order = "";
+        distance_scoring_weight = 1.0f;
+        center_scoring_weight = 1.0f;
+        size_scoring_weight = 1.0f;
+        aim_weight_tiebreak_ratio = 0.1f;
+        small_target_enhancement_enabled = true;
+        small_target_boost_factor = 0.1f;
+        small_target_threshold = 0.02f;
+        small_target_medium_threshold = 0.05f;
+        small_target_medium_boost = 1.5f;
+        small_target_smooth_enabled = true;
+        small_target_smooth_frames = 2;
+        class_aim_positions.clear();
+        custom_class_names.clear();
 
         // Mouse
         fovX = 106;
@@ -78,6 +102,7 @@ bool Config::loadConfig(const std::string& filename)
 
         smoothness = 100;
         use_smoothing = true;
+        tracking_smoothing = false;
 
         use_kalman = false;
         kalman_process_noise = 0.01f;
@@ -87,8 +112,20 @@ bool Config::loadConfig(const std::string& filename)
         resetThreshold = 5;
     
         predictionInterval = 0.01f;
+        prediction_mode = 0;
+        prediction_kalman_lead_ms = 0.0f;
+        prediction_kalman_max_lead_ms = 0.0f;
+        prediction_velocity_smoothing = 0.4f;
+        prediction_velocity_scale = 1.0f;
+        prediction_kalman_process_noise = 0.01f;
+        prediction_kalman_measurement_noise = 0.10f;
+        prediction_use_future_for_aim = false;
         prediction_futurePositions = 20;
         draw_futurePositions = true;
+
+        camera_compensation_enabled = false;
+        camera_compensation_max_shift = 50.0f;
+        camera_compensation_strength = 1.0f;
 
         snapRadius = 1.5f;
         nearRadius = 25.0f;
@@ -168,6 +205,12 @@ bool Config::loadConfig(const std::string& filename)
         overlay_snow_theme = true;
         overlay_ui_scale = 1.0f;
 
+        // OBS
+        is_obs = false;
+        obs_ip = "0.0.0.0";
+        obs_port = 4455;
+        obs_fps = 240;
+
         // Custom classes
         class_player = 0;
         class_bot = 1;
@@ -232,25 +275,56 @@ bool Config::loadConfig(const std::string& filename)
         return false;
     }
 
+    auto get_raw_value_compat = [&](const char* key) -> const char*
+    {
+        const char* val = ini.GetValue("", key, nullptr);
+        if (val == nullptr)
+            val = ini.GetValue("ClassNames", key, nullptr);
+        if (val == nullptr)
+            val = ini.GetValue("Colors", key, nullptr);
+        return val;
+    };
+
     auto get_string = [&](const char* key, const std::string& defval)
     {
-        const char* val = ini.GetValue("", key, defval.c_str());
+        const char* val = get_raw_value_compat(key);
         return val ? std::string(val) : defval;
     };
 
     auto get_bool = [&](const char* key, bool defval)
         {
-            return ini.GetBoolValue("", key, defval);
+            std::string value = get_string(key, defval ? "true" : "false");
+            std::transform(value.begin(), value.end(), value.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (value == "1" || value == "true" || value == "yes" || value == "on")
+                return true;
+            if (value == "0" || value == "false" || value == "no" || value == "off")
+                return false;
+            return defval;
         };
 
     auto get_long = [&](const char* key, long defval)
         {
-            return (int)ini.GetLongValue("", key, defval);
+            try
+            {
+                return static_cast<int>(std::stol(get_string(key, std::to_string(defval))));
+            }
+            catch (...)
+            {
+                return static_cast<int>(defval);
+            }
         };
 
     auto get_double = [&](const char* key, double defval)
         {
-            return ini.GetDoubleValue("", key, defval);
+            try
+            {
+                return std::stod(get_string(key, std::to_string(defval)));
+            }
+            catch (...)
+            {
+                return defval;
+            }
         };
 
     game_profiles.clear();
@@ -328,6 +402,75 @@ bool Config::loadConfig(const std::string& filename)
     target_lock_enabled = get_bool("target_lock_enabled", false);
     target_lock_distance = static_cast<float>(get_double("target_lock_distance", 100.0));
     target_lock_reacquire_time = static_cast<float>(get_double("target_lock_reacquire_time", 0.30));
+    smart_target_lock = get_bool("smart_target_lock", true);
+    target_reference_class = get_long("target_reference_class", 0);
+    target_lock_fallback_class = get_long("target_lock_fallback_class", -1);
+    target_switch_delay = get_long("target_switch_delay", 0);
+    aim_bot_scope = static_cast<float>(get_double("aim_bot_scope", 160.0));
+    if (aim_bot_scope < 0.0f)
+        aim_bot_scope = 0.0f;
+    aim_bot_position = static_cast<float>(get_double("aim_bot_position", 0.5));
+    aim_bot_position2 = static_cast<float>(get_double("aim_bot_position2", 0.5));
+    allowed_classes = get_string("allowed_classes", "");
+    class_priority_order = get_string("class_priority_order", "");
+    distance_scoring_weight = static_cast<float>(get_double("distance_scoring_weight", 1.0));
+    center_scoring_weight = static_cast<float>(get_double("center_scoring_weight", 1.0));
+    size_scoring_weight = static_cast<float>(get_double("size_scoring_weight", 1.0));
+    aim_weight_tiebreak_ratio = static_cast<float>(get_double("aim_weight_tiebreak_ratio", 0.1));
+    small_target_enhancement_enabled = get_bool("small_target_enhancement_enabled", true);
+    small_target_boost_factor = static_cast<float>(get_double("small_target_boost_factor", 0.1));
+    small_target_threshold = static_cast<float>(get_double("small_target_threshold", 0.02));
+    small_target_medium_threshold = static_cast<float>(get_double("small_target_medium_threshold", 0.05));
+    small_target_medium_boost = static_cast<float>(get_double("small_target_medium_boost", 1.5));
+    small_target_smooth_enabled = get_bool("small_target_smooth_enabled", true);
+    small_target_smooth_frames = get_long("small_target_smooth_frames", 2);
+    if (small_target_smooth_frames < 1)
+        small_target_smooth_frames = 1;
+
+    class_aim_positions.clear();
+    CSimpleIniA::TNamesDepend classAimKeys;
+    ini.GetAllKeys("ClassAim", classAimKeys);
+    for (const auto& k : classAimKeys)
+    {
+        std::string key = k.pItem;
+        if (key.empty() || !std::all_of(key.begin(), key.end(),
+            [](unsigned char c) { return std::isdigit(c) != 0; }))
+            continue;
+        std::string val = ini.GetValue("ClassAim", key.c_str(), "");
+        auto parts = splitString(val, ',');
+        if (parts.size() < 2)
+            continue;
+        try
+        {
+            int class_id = std::stoi(key);
+            float pos1 = std::stof(parts[0]);
+            float pos2 = std::stof(parts[1]);
+            class_aim_positions[class_id] = { pos1, pos2 };
+        }
+        catch (...)
+        {
+            std::cerr << "[Config] Invalid ClassAim entry: " << key << " = " << val << std::endl;
+        }
+    }
+
+    custom_class_names.clear();
+    CSimpleIniA::TNamesDepend classNameKeys;
+    ini.GetAllKeys("ClassNames", classNameKeys);
+    for (const auto& k : classNameKeys)
+    {
+        std::string key = k.pItem;
+        if (key.empty() || !std::all_of(key.begin(), key.end(),
+            [](unsigned char c) { return std::isdigit(c) != 0; }))
+            continue;
+        std::string val = ini.GetValue("ClassNames", key.c_str(), "");
+        try
+        {
+            int class_id = std::stoi(key);
+            if (!val.empty())
+                custom_class_names[class_id] = val;
+        }
+        catch (...) {}
+    }
 
     // Mouse
     fovX = get_long("fovX", 106);
@@ -337,6 +480,7 @@ bool Config::loadConfig(const std::string& filename)
 
     smoothness = get_long("smoothness", 100);
     use_smoothing = get_bool("use_smoothing", true);
+    tracking_smoothing = get_bool("tracking_smoothing", false);
 
     use_kalman = get_bool("use_kalman", false);
     kalman_process_noise = (float)get_double("kalman_process_noise", 0.01);
@@ -346,8 +490,22 @@ bool Config::loadConfig(const std::string& filename)
     resetThreshold = (float)get_double("resetThreshold", 5);
 
     predictionInterval = (float)get_double("predictionInterval", 0.01);
+    prediction_mode = get_long("prediction_mode", 0);
+    if (prediction_mode < 0) prediction_mode = 0;
+    if (prediction_mode > 2) prediction_mode = 2;
+    prediction_kalman_lead_ms = (float)get_double("prediction_kalman_lead_ms", 0.0);
+    prediction_kalman_max_lead_ms = (float)get_double("prediction_kalman_max_lead_ms", 0.0);
+    prediction_velocity_smoothing = (float)get_double("prediction_velocity_smoothing", 0.4);
+    prediction_velocity_scale = (float)get_double("prediction_velocity_scale", 1.0);
+    prediction_kalman_process_noise = (float)get_double("prediction_kalman_process_noise", 0.01);
+    prediction_kalman_measurement_noise = (float)get_double("prediction_kalman_measurement_noise", 0.10);
+    prediction_use_future_for_aim = get_bool("prediction_use_future_for_aim", false);
     prediction_futurePositions = get_long("prediction_futurePositions", 20);
     draw_futurePositions = get_bool("draw_futurePositions", true);
+
+    camera_compensation_enabled = get_bool("camera_compensation_enabled", false);
+    camera_compensation_max_shift = (float)get_double("camera_compensation_max_shift", 50.0);
+    camera_compensation_strength = (float)get_double("camera_compensation_strength", 1.0);
     
     snapRadius = (float)get_double("snapRadius", 1.5);
     nearRadius = (float)get_double("nearRadius", 25.0);
@@ -386,7 +544,7 @@ bool Config::loadConfig(const std::string& filename)
     color_target = get_string("color_target", "yellow");
     tinyArea = get_long("tinyArea", 2);
     isOnlyTop = get_bool("isOnlyTop", true);
-    scanError = get_long("scanError", 0.1f);
+    scanError = static_cast<float>(get_double("scanError", 0.1));
 
     // HSV ranges
     color_ranges.clear();
@@ -479,6 +637,12 @@ bool Config::loadConfig(const std::string& filename)
     overlay_snow_theme = get_bool("overlay_snow_theme", true);
     overlay_ui_scale = (float)get_double("overlay_ui_scale", 1.0);
 
+    // OBS
+    is_obs = get_bool("is_obs", false);
+    obs_ip = get_string("obs_ip", "0.0.0.0");
+    obs_port = get_long("obs_port", 4455);
+    obs_fps = get_long("obs_fps", 240);
+
     // Custom Classes
     class_player = get_long("class_player", 0);
     class_bot = get_long("class_bot", 1);
@@ -540,7 +704,29 @@ bool Config::saveConfig(const std::string& filename)
         << std::fixed << std::setprecision(1)
         << "target_lock_distance = " << target_lock_distance << "\n"
         << std::fixed << std::setprecision(2)
-        << "target_lock_reacquire_time = " << target_lock_reacquire_time << "\n\n";
+        << "target_lock_reacquire_time = " << target_lock_reacquire_time << "\n"
+        << "smart_target_lock = " << (smart_target_lock ? "true" : "false") << "\n"
+        << "target_reference_class = " << target_reference_class << "\n"
+        << "target_lock_fallback_class = " << target_lock_fallback_class << "\n"
+        << "target_switch_delay = " << target_switch_delay << "\n"
+        << std::fixed << std::setprecision(1)
+        << "aim_bot_scope = " << aim_bot_scope << "\n"
+        << std::fixed << std::setprecision(2)
+        << "aim_bot_position = " << aim_bot_position << "\n"
+        << "aim_bot_position2 = " << aim_bot_position2 << "\n"
+        << "allowed_classes = " << allowed_classes << "\n"
+        << "class_priority_order = " << class_priority_order << "\n"
+        << "distance_scoring_weight = " << distance_scoring_weight << "\n"
+        << "center_scoring_weight = " << center_scoring_weight << "\n"
+        << "size_scoring_weight = " << size_scoring_weight << "\n"
+        << "aim_weight_tiebreak_ratio = " << aim_weight_tiebreak_ratio << "\n"
+        << "small_target_enhancement_enabled = " << (small_target_enhancement_enabled ? "true" : "false") << "\n"
+        << "small_target_boost_factor = " << small_target_boost_factor << "\n"
+        << "small_target_threshold = " << small_target_threshold << "\n"
+        << "small_target_medium_threshold = " << small_target_medium_threshold << "\n"
+        << "small_target_medium_boost = " << small_target_medium_boost << "\n"
+        << "small_target_smooth_enabled = " << (small_target_smooth_enabled ? "true" : "false") << "\n"
+        << "small_target_smooth_frames = " << small_target_smooth_frames << "\n\n";
 
     // Mouse
     file << "# Mouse move\n"
@@ -550,6 +736,7 @@ bool Config::saveConfig(const std::string& filename)
         << "maxSpeedMultiplier = " << maxSpeedMultiplier << "\n"
         << "smoothness = " << smoothness << "\n"
         << "use_smoothing = " << (use_smoothing ? "true" : "false") << "\n"
+        << "tracking_smoothing = " << (tracking_smoothing ? "true" : "false") << "\n"
         << "use_kalman = " << (use_kalman ? "true" : "false") << "\n\n"
         << "kalman_process_noise = " << kalman_process_noise << "\n"
         << "kalman_measurement_noise = " << kalman_measurement_noise << "\n"
@@ -559,8 +746,20 @@ bool Config::saveConfig(const std::string& filename)
 
         << std::fixed << std::setprecision(2)
         << "predictionInterval = " << predictionInterval << "\n"
+        << "prediction_mode = " << prediction_mode << "\n"
+        << "prediction_kalman_lead_ms = " << prediction_kalman_lead_ms << "\n"
+        << "prediction_kalman_max_lead_ms = " << prediction_kalman_max_lead_ms << "\n"
+        << "prediction_velocity_smoothing = " << prediction_velocity_smoothing << "\n"
+        << "prediction_velocity_scale = " << prediction_velocity_scale << "\n"
+        << "prediction_kalman_process_noise = " << prediction_kalman_process_noise << "\n"
+        << "prediction_kalman_measurement_noise = " << prediction_kalman_measurement_noise << "\n"
+        << "prediction_use_future_for_aim = " << (prediction_use_future_for_aim ? "true" : "false") << "\n"
         << "prediction_futurePositions = " << prediction_futurePositions << "\n"
         << "draw_futurePositions = " << (draw_futurePositions ? "true" : "false") << "\n"
+
+        << "camera_compensation_enabled = " << (camera_compensation_enabled ? "true" : "false") << "\n"
+        << "camera_compensation_max_shift = " << camera_compensation_max_shift << "\n"
+        << "camera_compensation_strength = " << camera_compensation_strength << "\n"
 
         << "snapRadius = " << snapRadius << "\n"
         << "nearRadius = " << nearRadius << "\n"
@@ -645,19 +844,11 @@ bool Config::saveConfig(const std::string& filename)
         << std::fixed << std::setprecision(2)
         << "overlay_ui_scale = " << overlay_ui_scale << "\n\n";
 
-    // Custom Classes
-    file << "# Custom Classes\n"
-        << "class_player = " << class_player << "\n"
-        << "class_bot = " << class_bot << "\n"
-        << "class_weapon = " << class_weapon << "\n"
-        << "class_outline = " << class_outline << "\n"
-        << "class_dead_body = " << class_dead_body << "\n"
-        << "class_hideout_target_human = " << class_hideout_target_human << "\n"
-        << "class_hideout_target_balls = " << class_hideout_target_balls << "\n"
-        << "class_head = " << class_head << "\n"
-        << "class_smoke = " << class_smoke << "\n"
-        << "class_fire = " << class_fire << "\n"
-        << "class_third_person = " << class_third_person << "\n\n";
+    file << "# OBS\n"
+        << "is_obs = " << (is_obs ? "true" : "false") << "\n"
+        << "obs_ip = " << obs_ip << "\n"
+        << "obs_port = " << obs_port << "\n"
+        << "obs_fps = " << obs_fps << "\n\n";
 
     // Color detection
     file << "# Color detection\n";
@@ -668,15 +859,6 @@ bool Config::saveConfig(const std::string& filename)
     file << "tinyArea = " << tinyArea << "\n";
     file << "isOnlyTop = " << isOnlyTop << "\n";
     file << "scanError = " << scanError << "\n\n";
-
-    file << "[Colors]\n";
-    for (const auto& cr : color_ranges) {
-        file << cr.name << " = "
-            << cr.h_low << "," << cr.s_low << "," << cr.v_low << ","
-            << cr.h_high << "," << cr.s_high << "," << cr.v_high << "\n";
-    }
-    file << "\n";
-
 
     // Debug
     file << "# Debug\n"
@@ -689,6 +871,15 @@ bool Config::saveConfig(const std::string& filename)
     // Active game
     file << "# Active game profile\n";
     file << "active_game = " << active_game << "\n\n";
+
+    file << "[Colors]\n";
+    for (const auto& cr : color_ranges) {
+        file << cr.name << " = "
+            << cr.h_low << "," << cr.s_low << "," << cr.v_low << ","
+            << cr.h_high << "," << cr.s_high << "," << cr.v_high << "\n";
+    }
+    file << "\n";
+
     file << "[Games]\n";
     for (auto& kv : game_profiles)
     {
@@ -698,6 +889,44 @@ bool Config::saveConfig(const std::string& filename)
         file << "," << gp.pitch;
         if (gp.fovScaled)
             file << ",true," << gp.baseFOV;
+        file << "\n";
+    }
+    file << "\n";
+
+    if (!class_aim_positions.empty())
+    {
+        std::vector<int> class_ids;
+        class_ids.reserve(class_aim_positions.size());
+        for (const auto& kv : class_aim_positions)
+            class_ids.push_back(kv.first);
+        std::sort(class_ids.begin(), class_ids.end());
+        file << "[ClassAim]\n";
+        file << std::fixed << std::setprecision(2);
+        for (int class_id : class_ids)
+        {
+            auto it = class_aim_positions.find(class_id);
+            if (it == class_aim_positions.end())
+                continue;
+            file << class_id << " = " << it->second.first << "," << it->second.second << "\n";
+        }
+        file << "\n";
+    }
+
+    if (!custom_class_names.empty())
+    {
+        std::vector<int> class_ids;
+        class_ids.reserve(custom_class_names.size());
+        for (const auto& kv : custom_class_names)
+            class_ids.push_back(kv.first);
+        std::sort(class_ids.begin(), class_ids.end());
+        file << "[ClassNames]\n";
+        for (int class_id : class_ids)
+        {
+            auto it = custom_class_names.find(class_id);
+            if (it == custom_class_names.end())
+                continue;
+            file << class_id << " = " << it->second << "\n";
+        }
         file << "\n";
     }
 

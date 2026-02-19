@@ -67,6 +67,12 @@ MouseThread::MouseThread(
 
     kfX = Kalman1D(config.kalman_process_noise, config.kalman_measurement_noise);
     kfY = Kalman1D(config.kalman_process_noise, config.kalman_measurement_noise);
+    last_kalman_q = config.kalman_process_noise;
+    last_kalman_r = config.kalman_measurement_noise;
+
+    last_prediction_q = config.prediction_kalman_process_noise;
+    last_prediction_r = config.prediction_kalman_measurement_noise;
+    resetAimState();
 
     moveWorker = std::thread(&MouseThread::moveWorkerLoop, this);
 }
@@ -104,6 +110,8 @@ void MouseThread::updateConfig(
 
     kfX = Kalman1D(config.kalman_process_noise, config.kalman_measurement_noise);
     kfY = Kalman1D(config.kalman_process_noise, config.kalman_measurement_noise);
+    last_kalman_q = config.kalman_process_noise;
+    last_kalman_r = config.kalman_measurement_noise;
 
 }
 
@@ -193,53 +201,350 @@ void MouseThread::windMouseMoveRelative(int dx, int dy)
     }
 }
 
-std::pair<double, double> MouseThread::predict_target_position(double target_x, double target_y)
+double MouseThread::clampValue(double v, double lo, double hi)
 {
-    auto current_time = std::chrono::steady_clock::now();
+    return std::max(lo, std::min(hi, v));
+}
 
+void MouseThread::resetPredictionState()
+{
+    prediction_prev_time = std::chrono::steady_clock::time_point{};
+    prediction_prev_x = 0.0;
+    prediction_prev_y = 0.0;
+    prediction_smoothed_velocity_x = 0.0;
+    prediction_smoothed_velocity_y = 0.0;
+    prediction_velocity_x = 0.0;
+    prediction_velocity_y = 0.0;
+    prediction_initialized = false;
+    prediction_kalman_time = std::chrono::steady_clock::time_point{};
+    prediction_kalman_initialized = false;
+    last_prediction_mode = -1;
+    last_raw_velocity_x = 0.0;
+    last_raw_velocity_y = 0.0;
+
+    double q = (last_prediction_q > 0.0) ? last_prediction_q : 0.01;
+    double r = (last_prediction_r > 0.0) ? last_prediction_r : 0.1;
+    prediction_kf_x = Kalman1D(q, r);
+    prediction_kf_y = Kalman1D(q, r);
+}
+
+void MouseThread::resetKalmanState()
+{
+    kfX = Kalman1D(config.kalman_process_noise, config.kalman_measurement_noise);
+    kfY = Kalman1D(config.kalman_process_noise, config.kalman_measurement_noise);
+    prevKalmanTime = std::chrono::steady_clock::time_point{};
+    kalman_smoothing_initialized = false;
+    last_raw_kalman_x = 0.0;
+    last_raw_kalman_y = 0.0;
+    last_kx = 0.0;
+    last_ky = 0.0;
+}
+
+void MouseThread::resetSmoothingState()
+{
+    move_overflow_x = 0.0;
+    move_overflow_y = 0.0;
+    smooth_frame = 0;
+    smooth_start_x = 0.0;
+    smooth_start_y = 0.0;
+    smooth_prev_x = 0.0;
+    smooth_prev_y = 0.0;
+    smooth_last_tx = 0.0;
+    smooth_last_ty = 0.0;
+
+    tracking_initialized = false;
+    track_x = 0.0;
+    track_y = 0.0;
+    track_prev_x = 0.0;
+    track_prev_y = 0.0;
+    track_time = std::chrono::steady_clock::time_point{};
+    last_tracking_mode = -1;
+}
+
+void MouseThread::resetAimState()
+{
+    prev_time = std::chrono::steady_clock::time_point{};
+    prev_x = 0.0;
+    prev_y = 0.0;
+    prev_velocity_x = 0.0;
+    prev_velocity_y = 0.0;
+    last_target_time = std::chrono::steady_clock::time_point{};
+    target_detected.store(false);
+    resetPredictionState();
+    resetKalmanState();
+    resetSmoothingState();
+}
+
+void MouseThread::markTargetSeen()
+{
+    last_target_time = std::chrono::steady_clock::now();
+    target_detected.store(true);
+}
+
+void MouseThread::resetIfStale(double timeout_s)
+{
+    if (!target_detected.load())
+        return;
+    auto now = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(now - last_target_time).count();
+    if (elapsed > timeout_s)
+    {
+        resetAimState();
+    }
+}
+
+void MouseThread::ensurePredictionKalman(double q, double r)
+{
+    q = std::max(q, 1e-6);
+    r = std::max(r, 1e-6);
+    if (q != last_prediction_q || r != last_prediction_r)
+    {
+        last_prediction_q = q;
+        last_prediction_r = r;
+        resetPredictionState();
+    }
+}
+
+void MouseThread::ensureKalman(double q, double r)
+{
+    q = std::max(q, 1e-6);
+    r = std::max(r, 1e-6);
+    if (q != last_kalman_q || r != last_kalman_r)
+    {
+        kfX = Kalman1D(q, r);
+        kfY = Kalman1D(q, r);
+        last_kalman_q = q;
+        last_kalman_r = r;
+        kalman_smoothing_initialized = false;
+        prevKalmanTime = std::chrono::steady_clock::time_point{};
+    }
+}
+
+std::pair<double, double> MouseThread::cameraVelocity(double camera_dx, double camera_dy, double dt)
+{
+    if (!config.camera_compensation_enabled || dt <= 0.0)
+        return { 0.0, 0.0 };
+    double max_shift = std::max(0.0, static_cast<double>(config.camera_compensation_max_shift));
+    double strength = std::max(0.0, static_cast<double>(config.camera_compensation_strength));
+    double dx = clampValue(camera_dx, -max_shift, max_shift) * strength;
+    double dy = clampValue(camera_dy, -max_shift, max_shift) * strength;
+    return { dx / dt, dy / dt };
+}
+
+std::pair<double, double> MouseThread::updateStandardVelocity(
+    double targetX, double targetY, double camera_dx, double camera_dy)
+{
+    auto now = std::chrono::steady_clock::now();
     if (prev_time.time_since_epoch().count() == 0 || !target_detected.load())
     {
-        prev_time = current_time;
-        prev_x = target_x;
-        prev_y = target_y;
+        prev_time = now;
+        prev_x = targetX;
+        prev_y = targetY;
         prev_velocity_x = 0.0;
         prev_velocity_y = 0.0;
-        return { target_x, target_y };
+        return { 0.0, 0.0 };
     }
+    double dt = std::max(std::chrono::duration<double>(now - prev_time).count(), 1e-8);
+    auto cam = cameraVelocity(camera_dx, camera_dy, dt);
+    double vx = (targetX - prev_x) / dt - cam.first;
+    double vy = (targetY - prev_y) / dt - cam.second;
+    prev_time = now;
+    prev_x = targetX;
+    prev_y = targetY;
+    prev_velocity_x = clampValue(vx, -20000.0, 20000.0);
+    prev_velocity_y = clampValue(vy, -20000.0, 20000.0);
+    return { prev_velocity_x, prev_velocity_y };
+}
 
-    double dt = std::chrono::duration<double>(current_time - prev_time).count();
-    if (dt < 1e-8) dt = 1e-8;
-
-    double vx = (target_x - prev_x) / dt;
-    double vy = (target_y - prev_y) / dt;
-
-    vx = std::clamp(vx, -20000.0, 20000.0);
-    vy = std::clamp(vy, -20000.0, 20000.0);
-
-    prev_time = current_time;
-    prev_x = target_x;
-    prev_y = target_y;
-    prev_velocity_x = vx;
-    prev_velocity_y = vy;
-
-    double predictedX = target_x + vx * prediction_interval;
-    double predictedY = target_y + vy * prediction_interval;
-
-    double detectionDelay = 0.05;
-    if (config.backend == "DML")
+std::pair<double, double> MouseThread::updatePredictionState(
+    double pivotX, double pivotY, double camera_dx, double camera_dy)
+{
+    int mode = config.prediction_mode;
+    if (mode != last_prediction_mode)
     {
-        detectionDelay = dml_detector->lastInferenceTimeDML.count();
+        resetPredictionState();
+        last_prediction_mode = mode;
     }
-#ifdef USE_CUDA
+
+    auto now = std::chrono::steady_clock::now();
+    const double max_gap = 0.25;
+    if (prediction_prev_time.time_since_epoch().count() == 0)
+    {
+        prediction_prev_time = now;
+        prediction_prev_x = pivotX;
+        prediction_prev_y = pivotY;
+        if (mode != 0)
+        {
+            prediction_kf_x.reset(pivotX, 0.0);
+            prediction_kf_y.reset(pivotY, 0.0);
+            prediction_kalman_time = now;
+            prediction_kalman_initialized = true;
+        }
+        return { pivotX, pivotY };
+    }
+
+    double dt = std::chrono::duration<double>(now - prediction_prev_time).count();
+    if (dt > max_gap)
+    {
+        resetPredictionState();
+        prediction_prev_time = now;
+        prediction_prev_x = pivotX;
+        prediction_prev_y = pivotY;
+        if (mode != 0)
+        {
+            prediction_kf_x.reset(pivotX, 0.0);
+            prediction_kf_y.reset(pivotY, 0.0);
+            prediction_kalman_time = now;
+            prediction_kalman_initialized = true;
+        }
+        return { pivotX, pivotY };
+    }
+
+    dt = std::max(dt, 1e-8);
+    auto cam = cameraVelocity(camera_dx, camera_dy, dt);
+    double raw_vx = (pivotX - prediction_prev_x) / dt - cam.first;
+    double raw_vy = (pivotY - prediction_prev_y) / dt - cam.second;
+    raw_vx = clampValue(raw_vx, -20000.0, 20000.0);
+    raw_vy = clampValue(raw_vy, -20000.0, 20000.0);
+    prediction_prev_x = pivotX;
+    prediction_prev_y = pivotY;
+    prediction_prev_time = now;
+    last_raw_velocity_x = raw_vx;
+    last_raw_velocity_y = raw_vy;
+
+    double base_vx = raw_vx;
+    double base_vy = raw_vy;
+    double filt_x = pivotX;
+    double filt_y = pivotY;
+
+    if (mode != 0)
+    {
+        double reset_threshold = std::max(1.0, static_cast<double>(config.resetThreshold));
+        if (!prediction_kalman_initialized ||
+            std::hypot(pivotX - prediction_kf_x.x, pivotY - prediction_kf_y.x) > reset_threshold)
+        {
+            prediction_kf_x.reset(pivotX, 0.0);
+            prediction_kf_y.reset(pivotY, 0.0);
+            prediction_kalman_time = now;
+            prediction_kalman_initialized = true;
+        }
+
+        double kdt = dt;
+        if (prediction_kalman_time.time_since_epoch().count() != 0)
+            kdt = std::max(std::chrono::duration<double>(now - prediction_kalman_time).count(), 1e-8);
+        prediction_kalman_time = now;
+
+        filt_x = prediction_kf_x.update(pivotX, kdt);
+        filt_y = prediction_kf_y.update(pivotY, kdt);
+        base_vx = prediction_kf_x.v - cam.first;
+        base_vy = prediction_kf_y.v - cam.second;
+    }
+
+    double alpha = clampValue(config.prediction_velocity_smoothing, 0.0, 1.0);
+    if (!prediction_initialized)
+    {
+        prediction_smoothed_velocity_x = base_vx;
+        prediction_smoothed_velocity_y = base_vy;
+        prediction_initialized = true;
+    }
     else
     {
-        detectionDelay = trt_detector.lastInferenceTime.count();
+        prediction_smoothed_velocity_x += (base_vx - prediction_smoothed_velocity_x) * alpha;
+        prediction_smoothed_velocity_y += (base_vy - prediction_smoothed_velocity_y) * alpha;
+    }
+
+    double scale = std::max(0.0, static_cast<double>(config.prediction_velocity_scale));
+    prediction_velocity_x = prediction_smoothed_velocity_x * scale;
+    prediction_velocity_y = prediction_smoothed_velocity_y * scale;
+
+    if (mode == 0)
+        return { pivotX, pivotY };
+
+    double lead_ms = std::max(0.0, static_cast<double>(config.prediction_kalman_lead_ms));
+    double max_lead_ms = std::max(0.0, static_cast<double>(config.prediction_kalman_max_lead_ms));
+    if (max_lead_ms > 0.0 && lead_ms > max_lead_ms)
+        lead_ms = max_lead_ms;
+    double lead_s = lead_ms / 1000.0;
+
+    return { filt_x + prediction_velocity_x * lead_s,
+             filt_y + prediction_velocity_y * lead_s };
+}
+
+std::vector<std::pair<double, double>> MouseThread::predictFuturePositionsInternal(
+    double pivotX, double pivotY, int frames, double fps)
+{
+    std::vector<std::pair<double, double>> result;
+    if (frames <= 0)
+        return result;
+    if (prediction_prev_time.time_since_epoch().count() == 0)
+        return result;
+
+    double dt = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - prediction_prev_time).count();
+    if (dt > 0.5)
+        return result;
+
+    double frame_time = 1.0 / std::max(fps, 1.0);
+    double vx = prediction_initialized ? prediction_velocity_x : 0.0;
+    double vy = prediction_initialized ? prediction_velocity_y : 0.0;
+
+    result.reserve(frames);
+    for (int i = 1; i <= frames; ++i)
+    {
+        double t = frame_time * i;
+        result.push_back({ pivotX + vx * t, pivotY + vy * t });
+    }
+    return result;
+}
+
+std::pair<double, double> MouseThread::predict_target_position(double target_x, double target_y)
+{
+    ensurePredictionKalman(config.prediction_kalman_process_noise,
+        config.prediction_kalman_measurement_noise);
+    ensureKalman(config.kalman_process_noise, config.kalman_measurement_noise);
+
+    double infer_ms = 0.0;
+    if (config.backend == "DML" && dml_detector)
+    {
+        infer_ms = dml_detector->lastInferenceTimeDML.count();
+    }
+#ifdef USE_CUDA
+    else if (config.backend != "COLOR")
+    {
+        infer_ms = trt_detector.lastInferenceTime.count();
     }
 #endif
-    predictedX += vx * detectionDelay;
-    predictedY += vy * detectionDelay;
 
-    return { predictedX, predictedY };
+    auto pred = updatePredictionState(target_x, target_y, 0.0, 0.0);
+    double predX = pred.first;
+    double predY = pred.second;
+
+    int mode = config.prediction_mode;
+    double interval = std::max(0.0, static_cast<double>(config.predictionInterval));
+    if (mode == 0)
+    {
+        auto vel = updateStandardVelocity(target_x, target_y, 0.0, 0.0);
+        double latency_s = std::max(0.0, infer_ms) / 1000.0;
+        predX = target_x + vel.first * (interval + latency_s);
+        predY = target_y + vel.second * (interval + latency_s);
+    }
+    else if (mode == 2)
+    {
+        predX += last_raw_velocity_x * interval;
+        predY += last_raw_velocity_y * interval;
+    }
+
+    double latency_s = std::max(0.0, infer_ms) / 1000.0;
+    double extra_lead_s = latency_s;
+    if (mode == 1)
+        extra_lead_s += interval;
+    if ((mode == 1 || mode == 2) && extra_lead_s > 0.0)
+    {
+        predX += prediction_velocity_x * extra_lead_s;
+        predY += prediction_velocity_y * extra_lead_s;
+    }
+
+    return { predX, predY };
 }
 
 void MouseThread::sendMovementToDriver(int dx, int dy)
@@ -426,55 +731,18 @@ void MouseThread::releaseMouse()
 
 void MouseThread::resetPrediction()
 {
-    prev_time = std::chrono::steady_clock::time_point();
-    prev_x = 0;
-    prev_y = 0;
-    prev_velocity_x = 0;
-    prev_velocity_y = 0;
-    target_detected.store(false);
+    resetAimState();
 }
 
 void MouseThread::checkAndResetPredictions()
 {
-    auto current_time = std::chrono::steady_clock::now();
-    double elapsed = std::chrono::duration<double>(current_time - last_target_time).count();
-
-    if (elapsed > 0.5 && target_detected.load())
-    {
-        resetPrediction();
-    }
+    resetIfStale(0.5);
 }
 
 std::vector<std::pair<double, double>> MouseThread::predictFuturePositions(double pivotX, double pivotY, int frames)
 {
-    std::vector<std::pair<double, double>> result;
-    result.reserve(frames);
-
-    const double fixedFps = 30.0;
-    double frame_time = 1.0 / fixedFps;
-
-    auto current_time = std::chrono::steady_clock::now();
-    double dt = std::chrono::duration<double>(current_time - prev_time).count();
-
-    if (prev_time.time_since_epoch().count() == 0 || dt > 0.5)
-    {
-        return result;
-    }
-
-    double vx = prev_velocity_x;
-    double vy = prev_velocity_y;
-
-    for (int i = 1; i <= frames; i++)
-    {
-        double t = frame_time * i;
-
-        double px = pivotX + vx * t;
-        double py = pivotY + vy * t;
-
-        result.push_back({ px, py });
-    }
-
-    return result;
+    double fps = static_cast<double>(captureFps.load());
+    return predictFuturePositionsInternal(pivotX, pivotY, frames, fps);
 }
 
 void MouseThread::storeFuturePositions(const std::vector<std::pair<double, double>>& positions)
@@ -518,126 +786,291 @@ void MouseThread::setMakcuConnection(MakcuConnection* newMakcu)
     std::lock_guard<std::mutex> lock(   input_method_mutex);
     makcu = newMakcu;
 }
-// Kalma 
-void MouseThread::moveMouseWithKalman(double targetX, double targetY) {
-    double rawX = targetX, rawY = targetY;
-    static double lastRawX = 0.0, lastRawY = 0.0;
-    static bool   firstCall = true;
-    const double  resetThreshold = config.resetThreshold;
+std::pair<int, int> MouseThread::moveWithSmoothing(double targetX, double targetY, double fps)
+{
+    int N = smoothness > 0 ? smoothness : 1;
+    bool tracking = config.tracking_smoothing;
 
-    // 0) Сброс при большом «прыжке» цели или первом вызове
-    if (firstCall || std::hypot(rawX - lastRawX, rawY - lastRawY) > resetThreshold) {
-        kfX.x = rawX;  kfX.v = 0.0;  kfX.P = 1.0;
-        kfY.x = rawY;  kfY.v = 0.0;  kfY.P = 1.0;
-        prevKalmanTime = std::chrono::steady_clock::now();
-        firstCall = false;
+    int tracking_flag = tracking ? 1 : 0;
+    if (last_tracking_mode == -1 || last_tracking_mode != tracking_flag)
+    {
+        resetSmoothingState();
+        last_tracking_mode = tracking_flag;
     }
-    lastRawX = rawX;
-    lastRawY = rawY;
 
-    // 1) dt
-    auto now = std::chrono::steady_clock::now();
-    double dt = prevKalmanTime.time_since_epoch().count() == 0
-        ? 1.0 / static_cast<double>(config.capture_fps)
-        : std::max(std::chrono::duration<double>(now - prevKalmanTime).count(), 1e-8);
-    prevKalmanTime = now;
+    if (tracking)
+    {
+        auto now = std::chrono::steady_clock::now();
+        double dt;
+        if (track_time.time_since_epoch().count() == 0)
+            dt = 1.0 / std::max(fps, 1.0);
+        else
+            dt = std::max(std::chrono::duration<double>(now - track_time).count(), 1e-8);
+        dt = std::min(dt, 0.25);
+        track_time = now;
 
-    // 2) Predict+Update
-    double filtX = kfX.update(rawX, dt);
-    double filtY = kfY.update(rawY, dt);
+        if (!tracking_initialized)
+        {
+            track_x = center_x;
+            track_y = center_y;
+            track_prev_x = track_x;
+            track_prev_y = track_y;
+            tracking_initialized = true;
+        }
 
-    // 3) В дельту мыши
-    auto [mvX, mvY] = calc_movement(filtX, filtY);
-    mvX *= kalman_speed_multiplier_x;
-    mvY *= kalman_speed_multiplier_y;
+        double delta = std::hypot(targetX - track_x, targetY - track_y);
+        double reset_threshold = std::max(1.0, static_cast<double>(config.resetThreshold));
+        double base_alpha = 1.0 - std::exp(-dt * std::max(fps, 1.0) / N);
+        double catchup = clampValue(delta / std::max(reset_threshold, 1e-3), 0.0, 1.0);
+        double alpha = clampValue(base_alpha + (0.65 - base_alpha) * catchup, base_alpha, 0.65);
 
-    // 4) Отправка
-    int dx = static_cast<int>(std::round(mvX));
-    int dy = static_cast<int>(std::round(mvY));
-    if (wind_mouse_enabled) windMouseMoveRelative(dx, dy);
-    else                   queueMove(dx, dy);
+        track_x += (targetX - track_x) * alpha;
+        track_y += (targetY - track_y) * alpha;
+
+        double dx = track_x - track_prev_x;
+        double dy = track_y - track_prev_y;
+
+        auto mv = addOverflow(dx, dy, move_overflow_x, move_overflow_y);
+        int ix = static_cast<int>(mv.first);
+        int iy = static_cast<int>(mv.second);
+
+        track_prev_x = track_x;
+        track_prev_y = track_y;
+        smooth_last_tx = targetX;
+        smooth_last_ty = targetY;
+        return { ix, iy };
+    }
+
+    if (smooth_frame == 0 ||
+        std::hypot(targetX - smooth_last_tx, targetY - smooth_last_ty) > 1.0)
+    {
+        smooth_start_x = center_x;
+        smooth_start_y = center_y;
+        smooth_prev_x = smooth_start_x;
+        smooth_prev_y = smooth_start_y;
+        smooth_frame = 0;
+    }
+
+    smooth_last_tx = targetX;
+    smooth_last_ty = targetY;
+    smooth_frame = std::min(smooth_frame + 1, N);
+    double t = static_cast<double>(smooth_frame) / N;
+    double p = easeInOut(t);
+
+    double curX = smooth_start_x + (targetX - smooth_start_x) * p;
+    double curY = smooth_start_y + (targetY - smooth_start_y) * p;
+
+    double dx = curX - smooth_prev_x;
+    double dy = curY - smooth_prev_y;
+
+    auto mv = addOverflow(dx, dy, move_overflow_x, move_overflow_y);
+    int ix = static_cast<int>(mv.first);
+    int iy = static_cast<int>(mv.second);
+
+    smooth_prev_x = curX;
+    smooth_prev_y = curY;
+    return { ix, iy };
 }
 
-// Kalma + smooth
-void MouseThread::moveMouseWithKalmanAndSmoothing(double targetX, double targetY) 
+std::pair<int, int> MouseThread::moveWithKalman(double targetX, double targetY, double fps)
 {
-    double rawX = targetX;
-    double rawY = targetY;
-
-    const double resetThreshold = config.resetThreshold;
-
+    double reset_threshold = std::max(1.0, static_cast<double>(config.resetThreshold));
     auto now = std::chrono::steady_clock::now();
 
-    const double maxDt = 0.25; // avoid using stale timestamps after long pauses
-    bool needReset = !kalman_smoothing_initialized;
-
-    if (!needReset)
+    if (prevKalmanTime.time_since_epoch().count() == 0 ||
+        std::hypot(targetX - last_raw_kalman_x, targetY - last_raw_kalman_y) > reset_threshold)
     {
-        double jump = std::hypot(rawX - last_raw_kalman_x, rawY - last_raw_kalman_y);
-        if (jump > resetThreshold) needReset = true;
-
-        double dtSinceLast = std::chrono::duration<double>(now - prevKalmanTime).count();
-        if (dtSinceLast > maxDt) needReset = true;
+        kfX.reset(targetX, 0.0);
+        kfY.reset(targetY, 0.0);
+        prevKalmanTime = now;
     }
 
-    if (needReset || prevKalmanTime.time_since_epoch().count() == 0) {
-        kfX.x = rawX;  kfX.v = 0.0;  kfX.P = 1.0;
-        kfY.x = rawY;  kfY.v = 0.0;  kfY.P = 1.0;
+    last_raw_kalman_x = targetX;
+    last_raw_kalman_y = targetY;
+
+    auto now2 = std::chrono::steady_clock::now();
+    double dt;
+    if (prevKalmanTime.time_since_epoch().count() == 0)
+        dt = 1.0 / std::max(fps, 1.0);
+    else
+        dt = std::max(std::chrono::duration<double>(now2 - prevKalmanTime).count(), 1e-8);
+    prevKalmanTime = now2;
+
+    double filtX = kfX.update(targetX, dt);
+    double filtY = kfY.update(targetY, dt);
+
+    auto mv = calc_movement(filtX, filtY);
+    double mvX = mv.first * kalman_speed_multiplier_x;
+    double mvY = mv.second * kalman_speed_multiplier_y;
+
+    return { static_cast<int>(std::round(mvX)), static_cast<int>(std::round(mvY)) };
+}
+
+std::pair<int, int> MouseThread::moveWithKalmanAndSmoothing(double targetX, double targetY, double fps)
+{
+    double reset_threshold = std::max(1.0, static_cast<double>(config.resetThreshold));
+    auto now = std::chrono::steady_clock::now();
+    const double max_dt = 0.25;
+
+    bool need_reset = !kalman_smoothing_initialized;
+    if (!need_reset)
+    {
+        double jump = std::hypot(targetX - last_raw_kalman_x, targetY - last_raw_kalman_y);
+        if (jump > reset_threshold)
+            need_reset = true;
+        if (prevKalmanTime.time_since_epoch().count() != 0)
+        {
+            double since_last = std::chrono::duration<double>(now - prevKalmanTime).count();
+            if (since_last > max_dt)
+                need_reset = true;
+        }
+    }
+
+    if (need_reset || prevKalmanTime.time_since_epoch().count() == 0)
+    {
+        kfX.reset(targetX, 0.0);
+        kfY.reset(targetY, 0.0);
         prevKalmanTime = now;
-
-        last_kX = rawX;
-        last_kY = rawY;
-
+        last_kx = targetX;
+        last_ky = targetY;
         move_overflow_x = 0.0;
         move_overflow_y = 0.0;
-
         kalman_smoothing_initialized = true;
     }
-    last_raw_kalman_x = rawX;
-    last_raw_kalman_y = rawY;
+
+    last_raw_kalman_x = targetX;
+    last_raw_kalman_y = targetY;
 
     double dt;
-    if (prevKalmanTime.time_since_epoch().count() == 0 || needReset) {
-        dt = 1.0 / static_cast<double>(std::max(config.capture_fps, 1));
-    } else {
+    if (prevKalmanTime.time_since_epoch().count() == 0 || need_reset)
+        dt = 1.0 / std::max(fps, 1.0);
+    else
         dt = std::chrono::duration<double>(now - prevKalmanTime).count();
-    }
     prevKalmanTime = now;
-    dt = std::clamp(dt, 1e-8, maxDt);
+    dt = clampValue(dt, 1e-8, max_dt);
 
-    double filtX = kfX.update(rawX, dt);
-    double filtY = kfY.update(rawY, dt);
+    double filtX = kfX.update(targetX, dt);
+    double filtY = kfY.update(targetY, dt);
 
     int N = smoothness > 0 ? smoothness : 1;
-    double baseAlpha = 1.0 - std::exp(-dt * static_cast<double>(config.capture_fps) / N);
+    double base_alpha = 1.0 - std::exp(-dt * std::max(fps, 1.0) / N);
+    double delta = std::hypot(filtX - last_kx, filtY - last_ky);
+    double catchup = clampValue(delta / std::max(reset_threshold, 1e-3), 0.0, 1.0);
+    double max_alpha = config.tracking_smoothing ? 0.65 : 0.45;
+    double alpha = clampValue(base_alpha + (max_alpha - base_alpha) * catchup, base_alpha, max_alpha);
 
-    double delta = std::hypot(filtX - last_kX, filtY - last_kY);
-    double catchup = std::clamp(delta / std::max(resetThreshold, 1e-3), 0.0, 1.0);
-    double alpha = std::clamp(baseAlpha + (0.45 - baseAlpha) * catchup, baseAlpha, 0.45);
-
-    if (delta > resetThreshold) {
-        last_kX = filtX;
-        last_kY = filtY;
-    } else {
-        last_kX += (filtX - last_kX) * alpha;
-        last_kY += (filtY - last_kY) * alpha;
+    if (delta > reset_threshold)
+    {
+        last_kx = filtX;
+        last_ky = filtY;
+    }
+    else
+    {
+        last_kx += (filtX - last_kx) * alpha;
+        last_ky += (filtY - last_ky) * alpha;
     }
 
-    auto [mvX, mvY] = calc_movement(last_kX, last_kY);
+    auto mv = calc_movement(last_kx, last_ky);
+    double mvX = mv.first * kalman_speed_multiplier_x;
+    double mvY = mv.second * kalman_speed_multiplier_y;
 
-    mvX *= kalman_speed_multiplier_x;
-    mvY *= kalman_speed_multiplier_y;
+    auto step = addOverflow(mvX, mvY, move_overflow_x, move_overflow_y);
+    return { static_cast<int>(step.first), static_cast<int>(step.second) };
+}
 
-    auto [stepX, stepY] = addOverflow(mvX, mvY, move_overflow_x, move_overflow_y);
-    int dx = static_cast<int>(stepX);
-    int dy = static_cast<int>(stepY);
+std::pair<int, int> MouseThread::computeMove(
+    double targetX, double targetY, double fps, double infer_latency_ms,
+    double camera_dx, double camera_dy)
+{
+    markTargetSeen();
+    ensurePredictionKalman(config.prediction_kalman_process_noise,
+        config.prediction_kalman_measurement_noise);
+    ensureKalman(config.kalman_process_noise, config.kalman_measurement_noise);
 
-    if (dx || dy) {
-        if (wind_mouse_enabled) {
-            windMouseMoveRelative(dx, dy);
-        } else {
-            queueMove(dx, dy);
+    auto pred = updatePredictionState(targetX, targetY, camera_dx, camera_dy);
+    double predX = pred.first;
+    double predY = pred.second;
+
+    int mode = config.prediction_mode;
+    double interval = std::max(0.0, static_cast<double>(config.predictionInterval));
+
+    if (mode == 0)
+    {
+        auto vel = updateStandardVelocity(targetX, targetY, camera_dx, camera_dy);
+        double latency_s = std::max(0.0, infer_latency_ms) / 1000.0;
+        predX = targetX + vel.first * (interval + latency_s);
+        predY = targetY + vel.second * (interval + latency_s);
+    }
+    else if (mode == 2)
+    {
+        predX += last_raw_velocity_x * interval;
+        predY += last_raw_velocity_y * interval;
+    }
+
+    double latency_s = std::max(0.0, infer_latency_ms) / 1000.0;
+    double extra_lead_s = latency_s;
+    if (mode == 1)
+        extra_lead_s += interval;
+    if ((mode == 1 || mode == 2) && extra_lead_s > 0.0)
+    {
+        predX += prediction_velocity_x * extra_lead_s;
+        predY += prediction_velocity_y * extra_lead_s;
+    }
+
+    bool use_future_for_aim = config.prediction_use_future_for_aim;
+    bool need_future = use_future_for_aim || config.draw_futurePositions;
+    if (need_future)
+    {
+        auto future = predictFuturePositionsInternal(
+            predX, predY, config.prediction_futurePositions, fps);
+        if (use_future_for_aim && !future.empty())
+        {
+            predX = future.back().first;
+            predY = future.back().second;
         }
+        storeFuturePositions(future);
+    }
+    else
+    {
+        clearFuturePositions();
+    }
+
+    if (use_kalman && use_smoothing)
+        return moveWithKalmanAndSmoothing(predX, predY, fps);
+    if (use_kalman)
+        return moveWithKalman(predX, predY, fps);
+    if (use_smoothing)
+        return moveWithSmoothing(predX, predY, fps);
+
+    auto mv = calc_movement(predX, predY);
+    return { static_cast<int>(std::round(mv.first)), static_cast<int>(std::round(mv.second)) };
+}
+
+// Kalman (public wrappers)
+void MouseThread::moveMouseWithKalman(double targetX, double targetY)
+{
+    double fps = std::max(1.0, static_cast<double>(captureFps.load()));
+    auto delta = moveWithKalman(targetX, targetY, fps);
+    if (delta.first || delta.second)
+    {
+        if (wind_mouse_enabled)
+            windMouseMoveRelative(delta.first, delta.second);
+        else
+            queueMove(delta.first, delta.second);
+    }
+}
+
+// Kalman + smoothing (public wrappers)
+void MouseThread::moveMouseWithKalmanAndSmoothing(double targetX, double targetY)
+{
+    double fps = std::max(1.0, static_cast<double>(captureFps.load()));
+    auto delta = moveWithKalmanAndSmoothing(targetX, targetY, fps);
+    if (delta.first || delta.second)
+    {
+        if (wind_mouse_enabled)
+            windMouseMoveRelative(delta.first, delta.second);
+        else
+            queueMove(delta.first, delta.second);
     }
 }
 
@@ -672,129 +1105,56 @@ std::pair<double, double> MouseThread::addOverflow(
     return { int_x, int_y };
 }
 
-// «Микрошаговая» плавная наводка
-void MouseThread::moveMouseWithSmoothing(double targetX, double targetY)
-{
-    if (smoothness <= 0) smoothness = 1;
-
-    static double startX = 0.0, startY = 0.0;
-    static double prevX = 0.0, prevY = 0.0;
-    static double lastTX = 0.0, lastTY = 0.0;
-    static int    frame = 0;
-
-    std::lock_guard<std::mutex> lg(input_method_mutex);
-
-    if (frame == 0 || std::hypot(targetX - lastTX, targetY - lastTY) > 1.0) {
-        startX = center_x;
-        startY = center_y;
-        prevX = startX;
-        prevY = startY;
-        frame = 0;
-    }
-    lastTX = targetX;
-    lastTY = targetY;
-
-    int N = smoothness;
-    frame = std::min(frame + 1, N);
-    double t = double(frame) / N;
-    double p = easeInOut(t);
-
-    double curX = startX + (targetX - startX) * p;
-    double curY = startY + (targetY - startY) * p;
-
-    double dx = curX - prevX;
-    double dy = curY - prevY;
-
-    auto mv = addOverflow(dx, dy, move_overflow_x, move_overflow_y);
-    int ix = static_cast<int>(mv.first);
-    int iy = static_cast<int>(mv.second);
-    if (ix || iy) queueMove(ix, iy);
-
-    prevX = curX;
-    prevY = curY;
-}
-
 void MouseThread::setKalmanParams(double processNoise, double measurementNoise) {
     std::lock_guard<std::mutex> lg(input_method_mutex);
     // просто перезапускаем фильтры с новыми Q/R
     kfX = Kalman1D(processNoise, measurementNoise);
     kfY = Kalman1D(processNoise, measurementNoise);
+    last_kalman_q = processNoise;
+    last_kalman_r = measurementNoise;
+    kalman_smoothing_initialized = false;
+    prevKalmanTime = std::chrono::steady_clock::time_point{};
 }
 
 void MouseThread::moveMouse(const AimbotTarget& target)
 {
-    auto now = std::chrono::steady_clock::now();
-    double dt;
-    if (prevKalmanTime.time_since_epoch().count() == 0) {
-        dt = 1.0 / static_cast<double>(config.capture_fps);
-    }
-    else {
-        dt = std::chrono::duration<double>(now - prevKalmanTime).count();
-        dt = std::max(dt, 1e-8);
-    }
-    prevKalmanTime = now;
+    double fps = std::max(1.0, static_cast<double>(captureFps.load()));
+    double infer_ms = 0.0;
+    if (config.backend == "DML" && dml_detector)
+        infer_ms = dml_detector->lastInferenceTimeDML.count();
+#ifdef USE_CUDA
+    else if (config.backend != "COLOR")
+        infer_ms = trt_detector.lastInferenceTime.count();
+#endif
 
-    double rawX = target.x + target.w * 0.5;
-    double rawY = target.y + target.h * 0.5;
-    auto [predX, predY] = predict_target_position(rawX, rawY);
-
-    if (use_kalman && !use_smoothing) {
-        moveMouseWithKalman(predX, predY);
-    }
-    else if (!use_kalman && use_smoothing) {
-        moveMouseWithSmoothing(predX, predY);
-    }
-    else if (use_kalman && use_smoothing) {
-        moveMouseWithKalmanAndSmoothing(predX, predY);
-    }
-    else {
-        auto [mvX, mvY] = calc_movement(predX, predY);
+    auto delta = computeMove(target.pivotX, target.pivotY, fps, infer_ms, 0.0, 0.0);
+    if (delta.first || delta.second)
+    {
         if (wind_mouse_enabled)
-            windMouseMoveRelative(static_cast<int>(mvX), static_cast<int>(mvY));
+            windMouseMoveRelative(delta.first, delta.second);
         else
-            queueMove(static_cast<int>(std::round(mvX)),
-                static_cast<int>(std::round(mvY)));
+            queueMove(delta.first, delta.second);
     }
 }
 
 // Аналогично для moveMousePivot
 void MouseThread::moveMousePivot(double pivotX, double pivotY)
 {
-    auto now = std::chrono::steady_clock::now();
+    double fps = std::max(1.0, static_cast<double>(captureFps.load()));
+    double infer_ms = 0.0;
+    if (config.backend == "DML" && dml_detector)
+        infer_ms = dml_detector->lastInferenceTimeDML.count();
+#ifdef USE_CUDA
+    else if (config.backend != "COLOR")
+        infer_ms = trt_detector.lastInferenceTime.count();
+#endif
 
-    if (prev_time.time_since_epoch().count() == 0 || !target_detected.load()) {
-        prev_time = now;
-        prev_x = pivotX; prev_y = pivotY;
-        prev_velocity_x = prev_velocity_y = 0.0;
-    }
-    else {
-        double dt0 = std::max(1e-8,
-            std::chrono::duration<double>(now - prev_time).count());
-        prev_time = now;
-        double vx = std::clamp((pivotX - prev_x) / dt0, -20000.0, 20000.0);
-        double vy = std::clamp((pivotY - prev_y) / dt0, -20000.0, 20000.0);
-        prev_x = pivotX; prev_y = pivotY;
-        prev_velocity_x = vx; prev_velocity_y = vy;
-    }
-
-    double predX = pivotX + prev_velocity_x * (prediction_interval + 0.002);
-    double predY = pivotY + prev_velocity_y * (prediction_interval + 0.002);
-
-    if (use_kalman && !use_smoothing) {
-        moveMouseWithKalman(predX, predY);
-    }
-    else if (!use_kalman && use_smoothing) {
-        moveMouseWithSmoothing(predX, predY);
-    }
-    else if (use_kalman && use_smoothing) {
-        moveMouseWithKalmanAndSmoothing(predX, predY);
-    }
-    else {
-        auto [mvX, mvY] = calc_movement(predX, predY);
+    auto delta = computeMove(pivotX, pivotY, fps, infer_ms, 0.0, 0.0);
+    if (delta.first || delta.second)
+    {
         if (wind_mouse_enabled)
-            windMouseMoveRelative(static_cast<int>(mvX), static_cast<int>(mvY));
+            windMouseMoveRelative(delta.first, delta.second);
         else
-            queueMove(static_cast<int>(std::round(mvX)),
-                static_cast<int>(std::round(mvY)));
+            queueMove(delta.first, delta.second);
     }
 }

@@ -22,6 +22,8 @@ int monitors = get_active_monitors();
 
 static std::vector<std::string> virtual_cameras;
 static char virtual_camera_filter_buf[128] = "";
+static char obs_ip_buf[64] = "";
+static bool obs_buf_inited = false;
 
 void ensureVirtualCamerasLoaded() {
     if (virtual_cameras.empty()) {
@@ -80,13 +82,13 @@ void draw_capture_settings()
         config.saveConfig();
     }
 
-    std::vector<std::string> captureMethodOptions = { "duplication_api", "winrt", "virtual_camera" };
+    std::vector<std::string> captureMethodOptions = { "duplication_api", "winrt", "virtual_camera", "obs" };
     std::vector<const char*> captureMethodItems;
 
-    for (const auto& option : captureMethodOptions)
-    {
-        captureMethodItems.push_back(option.c_str());
-    }
+    captureMethodItems.push_back("duplication_api");
+    captureMethodItems.push_back("winrt");
+    captureMethodItems.push_back("virtual_camera");
+    captureMethodItems.push_back("obs");
 
     int currentcaptureMethodIndex = 0;
     for (size_t i = 0; i < captureMethodOptions.size(); ++i)
@@ -131,7 +133,7 @@ void draw_capture_settings()
         }
     }
 
-    if (config.capture_method == "duplication_api" || config.capture_method == "winrt")
+    if (config.capture_method == "duplication_api" || config.capture_method == "winrt" || config.capture_method == "obs")
     {
         std::vector<std::string> monitorNames;
         if (monitors == -1)
@@ -236,6 +238,38 @@ void draw_capture_settings()
         {
             config.saveConfig();
             capture_method_changed.store(true);
+        }
+    }
+
+    if (config.capture_method == "obs")
+    {
+        ImGui::Separator();
+        ImGui::Text("OBS");
+        if (ImGui::Checkbox("Enable OBS", &config.is_obs))
+        {
+            config.saveConfig();
+        }
+        if (!obs_buf_inited)
+        {
+            strncpy_s(obs_ip_buf, sizeof(obs_ip_buf), config.obs_ip.c_str(), _TRUNCATE);
+            obs_buf_inited = true;
+        }
+        if (ImGui::InputText("OBS IP", obs_ip_buf, IM_ARRAYSIZE(obs_ip_buf)))
+        {
+            config.obs_ip = obs_ip_buf;
+            config.saveConfig();
+        }
+        if (ImGui::InputInt("OBS Port", &config.obs_port))
+        {
+            if (config.obs_port < 0)
+                config.obs_port = 0;
+            config.saveConfig();
+        }
+        if (ImGui::InputInt("OBS FPS", &config.obs_fps))
+        {
+            if (config.obs_fps < 0)
+                config.obs_fps = 0;
+            config.saveConfig();
         }
     }
 }

@@ -23,9 +23,22 @@ float prev_snapBoostFactor = config.snapBoostFactor;
 int prev_smoothness = config.smoothness;
 static bool  prev_use_smoothing = config.use_smoothing;
 static bool  prev_use_kalman = config.use_kalman;
+static bool  prev_tracking_smoothing = config.tracking_smoothing;
 // TODO: проверить static, focuse_target не обновляется, только после перезапуска.
 float prev_kalman_process_noise = config.kalman_process_noise;
 float prev_kalman_measure_noise = config.kalman_measurement_noise;
+float prev_reset_threshold = config.resetThreshold;
+int   prev_prediction_mode = config.prediction_mode;
+float prev_prediction_lead_ms = config.prediction_kalman_lead_ms;
+float prev_prediction_max_lead_ms = config.prediction_kalman_max_lead_ms;
+float prev_prediction_velocity_smoothing = config.prediction_velocity_smoothing;
+float prev_prediction_velocity_scale = config.prediction_velocity_scale;
+float prev_prediction_kalman_q = config.prediction_kalman_process_noise;
+float prev_prediction_kalman_r = config.prediction_kalman_measurement_noise;
+bool  prev_prediction_use_future_for_aim = config.prediction_use_future_for_aim;
+bool  prev_camera_compensation_enabled = config.camera_compensation_enabled;
+float prev_camera_compensation_max_shift = config.camera_compensation_max_shift;
+float prev_camera_compensation_strength = config.camera_compensation_strength;
 
 bool  prev_wind_mouse_enabled = config.wind_mouse_enabled;
 float prev_wind_G = config.wind_G;
@@ -42,67 +55,64 @@ float prev_triggerbot_predict_alpha = static_cast<float>(config.triggerbot_predi
 bool prev_auto_shoot = config.auto_shoot;
 float prev_bScope_multiplier = config.bScope_multiplier;
 
-static void draw_target_correction_demo()
+static void draw_target_correction_demo_canvas()
 {
-    if (ImGui::CollapsingHeader("Visual demo"))
+    ImVec2 canvas_sz(220, 220);
+    ImGui::InvisibleButton("##tc_canvas", canvas_sz);
+
+    ImVec2 p0 = ImGui::GetItemRectMin();
+    ImVec2 p1 = ImGui::GetItemRectMax();
+    ImVec2 center{ (p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f };
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p0, p1, IM_COL32(25, 25, 25, 255));
+
+    const float scale = 4.0f;
+    float near_px = config.nearRadius * scale;
+    float snap_px = config.snapRadius * scale;
+    near_px = ImClamp(near_px, 10.0f, canvas_sz.x * 0.45f);
+    snap_px = ImClamp(snap_px, 6.0f, near_px - 4.0f);
+
+    dl->AddCircle(center, near_px, IM_COL32(80, 120, 255, 180), 64, 2.0f);
+    dl->AddCircle(center, snap_px, IM_COL32(255, 100, 100, 180), 64, 2.0f);
+
+    static float  dist_px = near_px;
+    static float  vel_px = 0.0f;
+    static double last_t = ImGui::GetTime();
+    double now = ImGui::GetTime();
+    double dt = now - last_t;
+    last_t = now;
+
+    double dist_units = dist_px / scale;
+    double speed_mult;
+    if (dist_units < config.snapRadius)
+        speed_mult = config.minSpeedMultiplier * config.snapBoostFactor;
+    else if (dist_units < config.nearRadius)
     {
-        ImVec2 canvas_sz(220, 220);
-        ImGui::InvisibleButton("##tc_canvas", canvas_sz);
-
-        ImVec2 p0 = ImGui::GetItemRectMin();
-        ImVec2 p1 = ImGui::GetItemRectMax();
-        ImVec2 center{ (p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f };
-
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(p0, p1, IM_COL32(25, 25, 25, 255));
-
-        const float scale = 4.0f;
-        float near_px = config.nearRadius * scale;
-        float snap_px = config.snapRadius * scale;
-        near_px = ImClamp(near_px, 10.0f, canvas_sz.x * 0.45f);
-        snap_px = ImClamp(snap_px, 6.0f, near_px - 4.0f);
-
-        dl->AddCircle(center, near_px, IM_COL32(80, 120, 255, 180), 64, 2.0f);
-        dl->AddCircle(center, snap_px, IM_COL32(255, 100, 100, 180), 64, 2.0f);
-
-        static float  dist_px = near_px;
-        static float  vel_px = 0.0f;
-        static double last_t = ImGui::GetTime();
-        double now = ImGui::GetTime();
-        double dt = now - last_t;
-        last_t = now;
-
-        double dist_units = dist_px / scale;
-        double speed_mult;
-        if (dist_units < config.snapRadius)
-            speed_mult = config.minSpeedMultiplier * config.snapBoostFactor;
-        else if (dist_units < config.nearRadius)
-        {
-            double t = dist_units / config.nearRadius;
-            double crv = 1.0 - pow(1.0 - t, config.speedCurveExponent);
-            speed_mult = config.minSpeedMultiplier +
-                (config.maxSpeedMultiplier - config.minSpeedMultiplier) * crv;
-        }
-        else
-        {
-            double norm = ImClamp(dist_units / config.nearRadius, 0.0, 1.0);
-            speed_mult = config.minSpeedMultiplier +
-                (config.maxSpeedMultiplier - config.minSpeedMultiplier) * norm;
-        }
-
-        double base_px_s = 60.0;
-        vel_px = static_cast<float>(base_px_s * speed_mult);
-        dist_px -= vel_px * static_cast<float>(dt);
-        if (dist_px <= 0.0f) dist_px = near_px;
-
-        ImVec2 dot{ center.x - dist_px, center.y };
-        dl->AddCircleFilled(dot, 4.0f, IM_COL32(255, 255, 80, 255));
-
-        ImGui::Dummy(ImVec2(0, 4));
-        ImGui::TextColored(ImVec4(0.31f, 0.48f, 1.0f, 1.0f), "Near radius");
-        ImGui::SameLine(130);
-        ImGui::TextColored(ImVec4(1.0f, 0.39f, 0.39f, 1.0f), "Snap radius");
+        double t = dist_units / config.nearRadius;
+        double crv = 1.0 - pow(1.0 - t, config.speedCurveExponent);
+        speed_mult = config.minSpeedMultiplier +
+            (config.maxSpeedMultiplier - config.minSpeedMultiplier) * crv;
     }
+    else
+    {
+        double norm = ImClamp(dist_units / config.nearRadius, 0.0, 1.0);
+        speed_mult = config.minSpeedMultiplier +
+            (config.maxSpeedMultiplier - config.minSpeedMultiplier) * norm;
+    }
+
+    double base_px_s = 60.0;
+    vel_px = static_cast<float>(base_px_s * speed_mult);
+    dist_px -= vel_px * static_cast<float>(dt);
+    if (dist_px <= 0.0f) dist_px = near_px;
+
+    ImVec2 dot{ center.x - dist_px, center.y };
+    dl->AddCircleFilled(dot, 4.0f, IM_COL32(255, 255, 80, 255));
+
+    ImGui::Dummy(ImVec2(0, 4));
+    ImGui::TextColored(ImVec4(0.31f, 0.48f, 1.0f, 1.0f), "Near radius");
+    ImGui::SameLine(130);
+    ImGui::TextColored(ImVec4(1.0f, 0.39f, 0.39f, 1.0f), "Snap radius");
 }
 
 struct DemoKalman1D {
@@ -121,11 +131,8 @@ struct DemoKalman1D {
     }
 };
 
-static void draw_smoothing_kalman_demo()
+static void draw_smoothing_kalman_demo_canvas()
 {
-    if (!ImGui::CollapsingHeader("Smooth + Kalman Demo"))
-        return;
-
     ImVec2 canvas_sz(220, 220);
     ImGui::InvisibleButton("##sk_canvas", canvas_sz);
     ImVec2 p0 = ImGui::GetItemRectMin();
@@ -202,7 +209,9 @@ void draw_mouse()
         input_method_changed.store(true);
         globalMouseThread->setUseSmoothing(config.use_smoothing);
     }
-
+    ImGui::SameLine();
+    ImGui::Checkbox("Tracking Smoothing", &config.tracking_smoothing);
+    ImGui::SameLine();
     if (ImGui::Checkbox("Enable Kalman Filter", &config.use_kalman))
     {
         config.saveConfig();
@@ -218,6 +227,7 @@ void draw_mouse()
         changed |= ImGui::SliderFloat("Kalman Measurement Noise", &config.kalman_measurement_noise, 0.40f, 1.0f, "%.4f");
         changed |= ImGui::SliderFloat("Kalman Speed Multiplier X", &config.kalman_speed_multiplier_x, 0.1f, 5.0f, "%.2f");
         changed |= ImGui::SliderFloat("Kalman Speed Multiplier Y", &config.kalman_speed_multiplier_y, 0.1f, 5.0f, "%.2f");
+        changed |= ImGui::SliderFloat("Reset Threshold", &config.resetThreshold, 1.0f, 20.0f, "%.1f");
 
         if (changed)
         {
@@ -235,33 +245,69 @@ void draw_mouse()
     }
 
 
-    draw_smoothing_kalman_demo();
+    if (ImGui::CollapsingHeader("Demos"))
+    {
+        if (ImGui::BeginTable("mouse_demo_table", 2, ImGuiTableFlags_SizingFixedFit))
+        {
+            ImGui::TableNextColumn();
+            ImGui::Text("Smooth + Kalman");
+            draw_smoothing_kalman_demo_canvas();
+            ImGui::TableNextColumn();
+            ImGui::Text("Visual");
+            draw_target_correction_demo_canvas();
+            ImGui::EndTable();
+        }
+    }
 
     ImGui::SeparatorText("Speed Multiplier");
     ImGui::SliderFloat("Min Speed Multiplier", &config.minSpeedMultiplier, 0.1f, 5.0f, "%.1f");
     ImGui::SliderFloat("Max Speed Multiplier", &config.maxSpeedMultiplier, 0.1f, 5.0f, "%.1f");
 
-    ImGui::SeparatorText("Prediction");
-    ImGui::SliderFloat("Prediction Interval", &config.predictionInterval, 0.00f, 0.5f, "%.2f");
-    if (config.predictionInterval == 0.00f)
+    if (config.use_kalman)
     {
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(255, 0, 0, 255), "-> Disabled");
-    }
-    else
-    {
-        
-        if (ImGui::SliderInt("Future Positions", &config.prediction_futurePositions, 1, 40))
+        ImGui::SeparatorText("Prediction");
+        ImGui::SliderFloat("Prediction Interval", &config.predictionInterval, 0.00f, 0.5f, "%.2f");
+        const char* mode_items[] = { "Standard", "Kalman Lead", "Kalman + Raw" };
+        int mode_idx = config.prediction_mode;
+        if (ImGui::Combo("Prediction Mode", &mode_idx, mode_items, IM_ARRAYSIZE(mode_items)))
         {
+            config.prediction_mode = mode_idx;
             config.saveConfig();
-            input_method_changed.store(true);
         }
+        ImGui::SliderFloat("Pred Kalman Lead (ms)", &config.prediction_kalman_lead_ms, 0.0f, 150.0f, "%.1f");
+        ImGui::SliderFloat("Pred Kalman Max Lead (ms)", &config.prediction_kalman_max_lead_ms, 0.0f, 250.0f, "%.1f");
+        ImGui::SliderFloat("Pred Velocity Smoothing", &config.prediction_velocity_smoothing, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Pred Velocity Scale", &config.prediction_velocity_scale, 0.0f, 3.0f, "%.2f");
+        ImGui::SliderFloat("Pred Kalman Q", &config.prediction_kalman_process_noise, 0.001f, 5.0f, "%.3f");
+        ImGui::SliderFloat("Pred Kalman R", &config.prediction_kalman_measurement_noise, 0.001f, 5.0f, "%.3f");
+        ImGui::Checkbox("Use Future For Aim", &config.prediction_use_future_for_aim);
+        if (config.predictionInterval == 0.00f)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(255, 0, 0, 255), "-> Disabled");
+        }
+        else
+        {
+            if (ImGui::SliderInt("Future Positions", &config.prediction_futurePositions, 1, 40))
+            {
+                config.saveConfig();
+                input_method_changed.store(true);
+            }
 
-        ImGui::SameLine();
-        if (ImGui::Checkbox("Draw##draw_future_positions_button", &config.draw_futurePositions))
-        {
-            config.saveConfig();
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Draw##draw_future_positions_button", &config.draw_futurePositions))
+            {
+                config.saveConfig();
+            }
         }
+    }
+
+    ImGui::SeparatorText("Camera Compensation");
+    ImGui::Checkbox("Enable Camera Compensation", &config.camera_compensation_enabled);
+    if (config.camera_compensation_enabled)
+    {
+        ImGui::SliderFloat("Camera Max Shift", &config.camera_compensation_max_shift, 0.0f, 200.0f, "%.1f");
+        ImGui::SliderFloat("Camera Strength", &config.camera_compensation_strength, 0.0f, 3.0f, "%.2f");
     }
 
     ImGui::SeparatorText("Target corrention");
@@ -269,7 +315,6 @@ void draw_mouse()
     ImGui::SliderFloat("Near Radius", &config.nearRadius, 1.0f, 40.0f, "%.1f");
     ImGui::SliderFloat("Speed Curve Exponent", &config.speedCurveExponent, 0.1f, 10.0f, "%.1f");
     ImGui::SliderFloat("Snap Boost Factor", &config.snapBoostFactor, 0.01f, 4.00f, "%.2f");
-    draw_target_correction_demo();
 
     ImGui::SeparatorText("Game Profile");
     std::vector<std::string> profile_names;
@@ -395,94 +440,83 @@ void draw_mouse()
         ImGui::PopStyleColor();
     }
 
-    ImGui::SeparatorText("Easy No Recoil");
-    ImGui::Checkbox("Easy No Recoil", &config.easynorecoil);
-    if (config.easynorecoil)
+    // TODO: Easy No Recoil is currently non-functional; keep it hidden until fixed.
+
+    if (ImGui::CollapsingHeader("Advanced"))
     {
-        ImGui::SliderFloat("No Recoil Strength", &config.easynorecoilstrength, 0.1f, 500.0f, "%.1f");
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Left/Right Arrow keys: Adjust recoil strength by 10");
-        
-        if (config.easynorecoilstrength >= 100.0f)
+        ImGui::SeparatorText("Auto Shoot");
+        ImGui::Checkbox("Auto Shoot", &config.auto_shoot);
+        if (config.auto_shoot)
         {
-            ImGui::TextColored(ImVec4(255, 255, 0, 255), "WARNING: High recoil strength may be detected.");
-        }
-    }
-
-    ImGui::SeparatorText("Auto Shoot");
-
-    ImGui::Checkbox("Auto Shoot", &config.auto_shoot);
-    if (config.auto_shoot)
-    {
-        ImGui::SliderFloat("bScope Multiplier", &config.bScope_multiplier, 0.2f, 2.0f, "%.1f");
-    }
-
-    ImGui::SeparatorText("Triggerbot");
-    ImGui::Checkbox("Triggerbot (only fire, no aim)", &config.triggerbot);
-    if (config.triggerbot)
-    {
-        float interval = static_cast<float>(config.triggerbot_interval);
-        if (ImGui::SliderFloat("Triggerbot interval (s, 0=hold)", &interval, 0.0f, 2.0f, "%.2f"))
-        {
-            config.triggerbot_interval = interval;
-            config.saveConfig();
-        }
-        float predict_ms = static_cast<float>(config.triggerbot_predict_ms);
-        if (ImGui::SliderFloat("Triggerbot predict (ms)", &predict_ms, 0.0f, 150.0f, "%.0f"))
-        {
-            config.triggerbot_predict_ms = predict_ms;
-            config.saveConfig();
-        }
-        float predict_alpha = static_cast<float>(config.triggerbot_predict_alpha);
-        if (ImGui::SliderFloat("Triggerbot velocity smoothing", &predict_alpha, 0.0f, 1.0f, "%.2f"))
-        {
-            config.triggerbot_predict_alpha = predict_alpha;
-            config.saveConfig();
-        }
-        ImGui::SliderFloat("Triggerbot bScope", &config.triggerbot_bScope_multiplier, 0.5f, 2.0f, "%.1f");
-    }
-
-    ImGui::SeparatorText("Wind mouse");
-
-    if (ImGui::Checkbox("Enable WindMouse", &config.wind_mouse_enabled))
-    {
-        config.saveConfig();
-        input_method_changed.store(true);
-    }
-
-    if (config.wind_mouse_enabled)
-    {
-        if (ImGui::SliderFloat("Gravity force", &config.wind_G, 4.00f, 40.00f, "%.2f"))
-        {
-            config.saveConfig();
+            ImGui::SliderFloat("bScope Multiplier", &config.bScope_multiplier, 0.2f, 2.0f, "%.1f");
         }
 
-        if (ImGui::SliderFloat("Wind fluctuation", &config.wind_W, 1.00f, 40.00f, "%.2f"))
+        ImGui::SeparatorText("Triggerbot");
+        ImGui::Checkbox("Triggerbot (only fire, no aim)", &config.triggerbot);
+        if (config.triggerbot)
         {
-            config.saveConfig();
+            float interval = static_cast<float>(config.triggerbot_interval);
+            if (ImGui::SliderFloat("Triggerbot interval (s, 0=hold)", &interval, 0.0f, 2.0f, "%.2f"))
+            {
+                config.triggerbot_interval = interval;
+                config.saveConfig();
+            }
+            float predict_ms = static_cast<float>(config.triggerbot_predict_ms);
+            if (ImGui::SliderFloat("Triggerbot predict (ms)", &predict_ms, 0.0f, 150.0f, "%.0f"))
+            {
+                config.triggerbot_predict_ms = predict_ms;
+                config.saveConfig();
+            }
+            float predict_alpha = static_cast<float>(config.triggerbot_predict_alpha);
+            if (ImGui::SliderFloat("Triggerbot velocity smoothing", &predict_alpha, 0.0f, 1.0f, "%.2f"))
+            {
+                config.triggerbot_predict_alpha = predict_alpha;
+                config.saveConfig();
+            }
+            ImGui::SliderFloat("Triggerbot bScope", &config.triggerbot_bScope_multiplier, 0.5f, 2.0f, "%.1f");
         }
 
-        if (ImGui::SliderFloat("Max step (velocity clip)", &config.wind_M, 1.00f, 40.00f, "%.2f"))
+        ImGui::SeparatorText("Wind mouse");
+        if (ImGui::Checkbox("Enable WindMouse", &config.wind_mouse_enabled))
         {
             config.saveConfig();
+            input_method_changed.store(true);
         }
-
-        if (ImGui::SliderFloat("Distance where behaviour changes", &config.wind_D, 1.00f, 40.00f, "%.2f"))
+        if (config.wind_mouse_enabled)
         {
-            config.saveConfig();
-        }
+            if (ImGui::SliderFloat("Gravity force", &config.wind_G, 4.00f, 40.00f, "%.2f"))
+            {
+                config.saveConfig();
+            }
 
-        if (ImGui::Button("Reset Wind Mouse to default settings"))
-        {
-            config.wind_G = 18.0f;
-            config.wind_W = 15.0f;
-            config.wind_M = 10.0f;
-            config.wind_D = 8.0f;
-            config.saveConfig();
+            if (ImGui::SliderFloat("Wind fluctuation", &config.wind_W, 1.00f, 40.00f, "%.2f"))
+            {
+                config.saveConfig();
+            }
+
+            if (ImGui::SliderFloat("Max step (velocity clip)", &config.wind_M, 1.00f, 40.00f, "%.2f"))
+            {
+                config.saveConfig();
+            }
+
+            if (ImGui::SliderFloat("Distance where behaviour changes", &config.wind_D, 1.00f, 40.00f, "%.2f"))
+            {
+                config.saveConfig();
+            }
+
+            if (ImGui::Button("Reset Wind Mouse to default settings"))
+            {
+                config.wind_G = 18.0f;
+                config.wind_W = 15.0f;
+                config.wind_M = 10.0f;
+                config.wind_D = 8.0f;
+                config.saveConfig();
+            }
         }
     }
 
     ImGui::SeparatorText("Input method");
-    std::vector<std::string> input_methods = { "MAKCU", "KMBOX_B", "ARDUINO" };
+    std::vector<std::string> input_methods = { "WIN32", "ARDUINO", "KMBOX_B", "KMBOX_NET", "MAKCU" };
 
     std::vector<const char*> method_items;
     method_items.reserve(input_methods.size());
@@ -749,12 +783,25 @@ void draw_mouse()
         prev_fovY != config.fovY ||
         config.smoothness != prev_smoothness ||
         prev_use_smoothing != config.use_smoothing ||
+        prev_tracking_smoothing != config.tracking_smoothing ||
         prev_use_kalman != config.use_kalman ||
         prev_kalman_process_noise != config.kalman_process_noise ||
         prev_kalman_measure_noise != config.kalman_measurement_noise ||
+        prev_reset_threshold != config.resetThreshold ||
         prev_minSpeedMultiplier != config.minSpeedMultiplier ||
         prev_maxSpeedMultiplier != config.maxSpeedMultiplier ||
         prev_predictionInterval != config.predictionInterval ||
+        prev_prediction_mode != config.prediction_mode ||
+        prev_prediction_lead_ms != config.prediction_kalman_lead_ms ||
+        prev_prediction_max_lead_ms != config.prediction_kalman_max_lead_ms ||
+        prev_prediction_velocity_smoothing != config.prediction_velocity_smoothing ||
+        prev_prediction_velocity_scale != config.prediction_velocity_scale ||
+        prev_prediction_kalman_q != config.prediction_kalman_process_noise ||
+        prev_prediction_kalman_r != config.prediction_kalman_measurement_noise ||
+        prev_prediction_use_future_for_aim != config.prediction_use_future_for_aim ||
+        prev_camera_compensation_enabled != config.camera_compensation_enabled ||
+        prev_camera_compensation_max_shift != config.camera_compensation_max_shift ||
+        prev_camera_compensation_strength != config.camera_compensation_strength ||
         prev_snapRadius != config.snapRadius ||
         prev_nearRadius != config.nearRadius ||
         prev_speedCurveExponent != config.speedCurveExponent ||
@@ -764,12 +811,25 @@ void draw_mouse()
         prev_fovY = config.fovY;
         prev_smoothness = config.smoothness;
         prev_use_smoothing            = config.use_smoothing;
+        prev_tracking_smoothing       = config.tracking_smoothing;
         prev_use_kalman               = config.use_kalman;
         prev_kalman_process_noise     = config.kalman_process_noise;
         prev_kalman_measure_noise     = config.kalman_measurement_noise;
+        prev_reset_threshold          = config.resetThreshold;
         prev_minSpeedMultiplier = config.minSpeedMultiplier;
         prev_maxSpeedMultiplier = config.maxSpeedMultiplier;
         prev_predictionInterval = config.predictionInterval;
+        prev_prediction_mode = config.prediction_mode;
+        prev_prediction_lead_ms = config.prediction_kalman_lead_ms;
+        prev_prediction_max_lead_ms = config.prediction_kalman_max_lead_ms;
+        prev_prediction_velocity_smoothing = config.prediction_velocity_smoothing;
+        prev_prediction_velocity_scale = config.prediction_velocity_scale;
+        prev_prediction_kalman_q = config.prediction_kalman_process_noise;
+        prev_prediction_kalman_r = config.prediction_kalman_measurement_noise;
+        prev_prediction_use_future_for_aim = config.prediction_use_future_for_aim;
+        prev_camera_compensation_enabled = config.camera_compensation_enabled;
+        prev_camera_compensation_max_shift = config.camera_compensation_max_shift;
+        prev_camera_compensation_strength = config.camera_compensation_strength;
         prev_snapRadius = config.snapRadius;
         prev_nearRadius = config.nearRadius;
         prev_speedCurveExponent = config.speedCurveExponent;

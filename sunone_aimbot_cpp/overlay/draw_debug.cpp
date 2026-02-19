@@ -4,6 +4,11 @@
 #include <Windows.h>
 
 #include <d3d11.h>
+#include <algorithm>
+#include <cctype>
+#include <sstream>
+#include <unordered_set>
+#include <vector>
 
 #include "imgui/imgui.h"
 #include "sunone_aimbot_cpp.h"
@@ -30,6 +35,25 @@ static int texW = 0, texH = 0;
 
 
 static float debug_scale = 1.0f;
+
+static std::vector<int> parse_int_list_local(const std::string& text)
+{
+    std::vector<int> values;
+    std::string cleaned;
+    cleaned.reserve(text.size());
+    for (char c : text)
+    {
+        if (std::isdigit(static_cast<unsigned char>(c)))
+            cleaned.push_back(c);
+        else
+            cleaned.push_back(' ');
+    }
+    std::stringstream ss(cleaned);
+    int val = 0;
+    while (ss >> val)
+        values.push_back(val);
+    return values;
+}
 
 static void uploadDebugFrame(const cv::Mat& bgr)
 {
@@ -97,9 +121,35 @@ void draw_debug_frame()
     ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
     {
+        auto allowed_list = parse_int_list_local(config.allowed_classes);
+        std::unordered_set<int> allowed_set(allowed_list.begin(), allowed_list.end());
+
+        auto is_class_visible = [&](int cls) -> bool
+            {
+                auto it_name = config.custom_class_names.find(cls);
+                if (it_name != config.custom_class_names.end() && it_name->second == "__deleted__")
+                    return false;
+                if (config.disable_headshot && cls == config.class_head)
+                    return false;
+                if (cls == config.class_third_person && config.ignore_third_person)
+                    return false;
+                if ((cls == config.class_hideout_target_human || cls == config.class_hideout_target_balls) &&
+                    !config.shooting_range_targets)
+                    return false;
+                if (allowed_set.empty())
+                    return false;
+                return allowed_set.count(cls) > 0;
+            };
+
         std::lock_guard<std::mutex> lock(detectionBuffer.mutex);
         for (size_t i = 0; i < detectionBuffer.boxes.size(); ++i)
         {
+            int cls = -1;
+            if (i < detectionBuffer.classes.size())
+                cls = detectionBuffer.classes[i];
+            if (cls >= 0 && !is_class_visible(cls))
+                continue;
+
             const cv::Rect& box = detectionBuffer.boxes[i];
 
             ImVec2 p1(image_pos.x + box.x * debug_scale,
@@ -111,9 +161,9 @@ void draw_debug_frame()
 
             draw_list->AddRect(p1, p2, color, 0.0f, 0, 2.0f);
 
-            if (i < detectionBuffer.classes.size())
+            if (cls >= 0)
             {
-                std::string label = "Class " + std::to_string(detectionBuffer.classes[i]);
+                std::string label = "Class " + std::to_string(cls);
                 draw_list->AddText(ImVec2(p1.x, p1.y - 16), IM_COL32(255, 255, 0, 255), label.c_str());
             }
         }

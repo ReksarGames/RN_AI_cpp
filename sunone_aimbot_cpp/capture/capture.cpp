@@ -65,7 +65,7 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
             std::cout << "[Capture] OpenCV version: " << CV_VERSION << std::endl;
 
         IScreenCapture* capturer = nullptr;
-        if (config.capture_method == "duplication_api")
+        if (config.capture_method == "duplication_api" || config.capture_method == "obs")
         {
             capturer = new DuplicationAPIScreenCapture(CAPTURE_WIDTH, CAPTURE_HEIGHT);
             if (config.verbose)
@@ -145,7 +145,7 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
                 int newWidth = config.detection_resolution;
                 int newHeight = config.detection_resolution;
 
-                if (config.capture_method == "duplication_api")
+                if (config.capture_method == "duplication_api" || config.capture_method == "obs")
                 {
                     capturer = new DuplicationAPIScreenCapture(newWidth, newHeight);
                     if (config.verbose)

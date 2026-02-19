@@ -3,6 +3,7 @@
 
 void draw_capture_settings();
 void draw_target();
+void draw_classes();
 void draw_mouse();
 void draw_ai();
 void draw_buttons();

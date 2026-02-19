@@ -88,12 +88,17 @@ private:
     double easeInOut(double t);
     std::pair<double, double> addOverflow(double dx, double dy,
         double& overflow_x, double& overflow_y);
-    void moveMouseWithSmoothing(double targetX, double targetY);
 
     struct Kalman1D {
-        double x{ 0 }, v{ 0 }, P{ 1 }, Q, R;
+        double x{ 0 }, v{ 0 }, P{ 1 }, Q{ 0.01 }, R{ 0.1 };
+        Kalman1D() = default;
         Kalman1D(double processNoise, double measurementNoise)
             : Q(processNoise), R(measurementNoise) {
+        }
+        void reset(double x0 = 0.0, double v0 = 0.0) {
+            x = x0;
+            v = v0;
+            P = 1.0;
         }
         double update(double z, double dt) {
             x += v * dt;
@@ -108,23 +113,70 @@ private:
 
     Kalman1D    kfX{ 0.01, 0.1 }, kfY{ 0.01, 0.1 };
     std::chrono::steady_clock::time_point prevKalmanTime{};
-    bool        smoothingActive = false;
-    int         smoothingSteps = 0;
-    double      smoothingStartX = 0, smoothingStartY = 0;
-    double      smoothingTargetX = 0, smoothingTargetY = 0;
-    double      smoothingDurationMs = 0;
-    std::chrono::steady_clock::time_point smoothingStartTime{};
-
-    double last_dx{ 0.0 };
-    double last_dy{ 0.0 };
-    double last_kX{ 0.0 };
-    double last_kY{ 0.0 };
+    double last_kx{ 0.0 };
+    double last_ky{ 0.0 };
     double last_raw_kalman_x{ 0.0 };
     double last_raw_kalman_y{ 0.0 };
     bool   kalman_smoothing_initialized{ false };
+    double last_kalman_q{ -1.0 };
+    double last_kalman_r{ -1.0 };
+
+    // Sunone prediction state
+    std::chrono::steady_clock::time_point prediction_prev_time{};
+    double prediction_prev_x{ 0.0 };
+    double prediction_prev_y{ 0.0 };
+    double prediction_smoothed_velocity_x{ 0.0 };
+    double prediction_smoothed_velocity_y{ 0.0 };
+    double prediction_velocity_x{ 0.0 };
+    double prediction_velocity_y{ 0.0 };
+    bool   prediction_initialized{ false };
+    std::chrono::steady_clock::time_point prediction_kalman_time{};
+    bool   prediction_kalman_initialized{ false };
+    int    last_prediction_mode{ -1 };
+    double last_prediction_q{ -1.0 };
+    double last_prediction_r{ -1.0 };
+    Kalman1D prediction_kf_x{ 0.01, 0.1 };
+    Kalman1D prediction_kf_y{ 0.01, 0.1 };
+    double last_raw_velocity_x{ 0.0 };
+    double last_raw_velocity_y{ 0.0 };
+
+    // Smoothing state
+    int    smooth_frame{ 0 };
+    double smooth_start_x{ 0.0 };
+    double smooth_start_y{ 0.0 };
+    double smooth_prev_x{ 0.0 };
+    double smooth_prev_y{ 0.0 };
+    double smooth_last_tx{ 0.0 };
+    double smooth_last_ty{ 0.0 };
+
+    bool   tracking_initialized{ false };
+    double track_x{ 0.0 };
+    double track_y{ 0.0 };
+    double track_prev_x{ 0.0 };
+    double track_prev_y{ 0.0 };
+    std::chrono::steady_clock::time_point track_time{};
+    int    last_tracking_mode{ -1 };
 
     double kalman_speed_multiplier_x{ 1.0 };
     double kalman_speed_multiplier_y{ 1.0 };
+
+    static double clampValue(double v, double lo, double hi);
+    void resetAimState();
+    void resetPredictionState();
+    void resetKalmanState();
+    void resetSmoothingState();
+    void markTargetSeen();
+    void resetIfStale(double timeout_s);
+    void ensurePredictionKalman(double q, double r);
+    void ensureKalman(double q, double r);
+    std::pair<double, double> cameraVelocity(double camera_dx, double camera_dy, double dt);
+    std::pair<double, double> updateStandardVelocity(double targetX, double targetY, double camera_dx, double camera_dy);
+    std::pair<double, double> updatePredictionState(double pivotX, double pivotY, double camera_dx, double camera_dy);
+    std::vector<std::pair<double, double>> predictFuturePositionsInternal(double pivotX, double pivotY, int frames, double fps);
+    std::pair<int, int> moveWithSmoothing(double targetX, double targetY, double fps);
+    std::pair<int, int> moveWithKalman(double targetX, double targetY, double fps);
+    std::pair<int, int> moveWithKalmanAndSmoothing(double targetX, double targetY, double fps);
+    std::pair<int, int> computeMove(double targetX, double targetY, double fps, double infer_latency_ms, double camera_dx, double camera_dy);
 public:
     std::mutex input_method_mutex;
 

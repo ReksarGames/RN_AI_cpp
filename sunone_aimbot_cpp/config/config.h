@@ -11,7 +11,7 @@ class Config
 {
 public:
     // Capture
-    std::string capture_method; // "duplication_api", "winrt", "virtual_camera"
+    std::string capture_method; // "duplication_api", "winrt", "virtual_camera", "obs"
     int detection_resolution;
     int capture_fps;
     int monitor_idx;
@@ -33,6 +33,28 @@ public:
     bool target_lock_enabled;
     float target_lock_distance;
     float target_lock_reacquire_time;
+    bool smart_target_lock;
+    int target_reference_class;
+    int target_lock_fallback_class;
+    int target_switch_delay;
+    float aim_bot_scope;
+    float aim_bot_position;
+    float aim_bot_position2;
+    std::string allowed_classes;
+    std::string class_priority_order;
+    std::unordered_map<int, std::string> custom_class_names;
+    float distance_scoring_weight;
+    float center_scoring_weight;
+    float size_scoring_weight;
+    float aim_weight_tiebreak_ratio;
+    bool small_target_enhancement_enabled;
+    float small_target_boost_factor;
+    float small_target_threshold;
+    float small_target_medium_threshold;
+    float small_target_medium_boost;
+    bool small_target_smooth_enabled;
+    int small_target_smooth_frames;
+    std::unordered_map<int, std::pair<float, float>> class_aim_positions;
 
     // Mouse
     int fovX;
@@ -42,6 +64,7 @@ public:
 
     int smoothness;
     bool use_smoothing;
+    bool tracking_smoothing;
 
     bool use_kalman;
     float kalman_process_noise;
@@ -51,8 +74,20 @@ public:
     float resetThreshold;
 
     float predictionInterval;
+    int prediction_mode;
+    float prediction_kalman_lead_ms;
+    float prediction_kalman_max_lead_ms;
+    float prediction_velocity_smoothing;
+    float prediction_velocity_scale;
+    float prediction_kalman_process_noise;
+    float prediction_kalman_measurement_noise;
+    bool prediction_use_future_for_aim;
     int prediction_futurePositions;
     bool draw_futurePositions;
+
+    bool camera_compensation_enabled;
+    float camera_compensation_max_shift;
+    float camera_compensation_strength;
 
     float snapRadius;
     float nearRadius;
@@ -135,6 +170,12 @@ public:
     int overlay_opacity;
     bool overlay_snow_theme;
     float overlay_ui_scale;
+
+    // OBS
+    bool is_obs;
+    std::string obs_ip;
+    int obs_port;
+    int obs_fps;
 
     // Custom Classes
     int class_player;                  // 0
