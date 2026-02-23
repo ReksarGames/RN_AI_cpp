@@ -169,6 +169,64 @@ public:
     int overlay_opacity;
     bool overlay_snow_theme;
     float overlay_ui_scale;
+    bool game_overlay_enabled;
+    int game_overlay_max_fps;
+    bool game_overlay_draw_boxes;
+    bool game_overlay_draw_future;
+    bool game_overlay_draw_wind_tail;
+    bool game_overlay_draw_frame;
+    bool game_overlay_show_target_correction;
+    int game_overlay_box_a;
+    int game_overlay_box_r;
+    int game_overlay_box_g;
+    int game_overlay_box_b;
+    int game_overlay_frame_a;
+    int game_overlay_frame_r;
+    int game_overlay_frame_g;
+    int game_overlay_frame_b;
+    float game_overlay_box_thickness;
+    float game_overlay_frame_thickness;
+    float game_overlay_future_point_radius;
+    float game_overlay_future_alpha_falloff;
+    bool game_overlay_icon_enabled;
+    std::string game_overlay_icon_path;
+    int game_overlay_icon_width;
+    int game_overlay_icon_height;
+    float game_overlay_icon_offset_x;
+    float game_overlay_icon_offset_y;
+    std::string game_overlay_icon_anchor;
+    int game_overlay_icon_class;
+    bool aim_sim_enabled;
+    int aim_sim_x;
+    int aim_sim_y;
+    int aim_sim_width;
+    int aim_sim_height;
+    int aim_sim_fps_min;
+    int aim_sim_fps_max;
+    float aim_sim_fps_jitter;
+    float aim_sim_capture_delay_ms;
+    float aim_sim_inference_delay_ms;
+    bool aim_sim_use_live_inference;
+    float aim_sim_input_delay_ms;
+    float aim_sim_extra_delay_ms;
+    float aim_sim_target_max_speed;
+    float aim_sim_target_accel;
+    float aim_sim_target_stop_chance;
+    bool aim_sim_show_observed;
+    bool aim_sim_show_history;
+
+    void clampGameOverlayColor()
+    {
+        auto clamp255 = [](int& v) { if (v < 0) v = 0; if (v > 255) v = 255; };
+        clamp255(game_overlay_box_a);
+        clamp255(game_overlay_box_r);
+        clamp255(game_overlay_box_g);
+        clamp255(game_overlay_box_b);
+        clamp255(game_overlay_frame_a);
+        clamp255(game_overlay_frame_r);
+        clamp255(game_overlay_frame_g);
+        clamp255(game_overlay_frame_b);
+    }
 
     // OBS
     bool is_obs;

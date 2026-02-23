@@ -26,6 +26,7 @@
 #include "other_tools.h"
 #include "virtual_camera.h"
 #include "config_dirty.h"
+#include "ui_theme.h"
 #ifdef USE_CUDA
 #include "trt_detector.h"
 #endif
@@ -199,6 +200,7 @@ void SetupImGui()
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
     ImGui::StyleColorsDark();
+    OverlayTheme_LoadAndApply("ui_theme.ini");
 
     load_body_texture();
 }
@@ -221,6 +223,12 @@ bool CreateOverlayWindow()
 
     if (g_hwnd == NULL)
         return false;
+
+#ifndef WDA_EXCLUDEFROMCAPTURE
+#define WDA_EXCLUDEFROMCAPTURE 0x00000011
+#endif
+    // Prevent recursive self-capture in debug view.
+    SetWindowDisplayAffinity(g_hwnd, WDA_EXCLUDEFROMCAPTURE);
     
     if (config.overlay_opacity <= 20)
     {
@@ -371,6 +379,13 @@ void OverlayThread()
                         ImGui::EndTabItem();
                     }
 
+                    if (ImGui::BeginTabItem("Game Overlay"))
+                    {
+                        draw_game_overlay_settings();
+
+                        ImGui::EndTabItem();
+                    }
+
                     if (ImGui::BeginTabItem("Stats"))
                     {
                         draw_stats();
@@ -381,6 +396,13 @@ void OverlayThread()
                     if (ImGui::BeginTabItem("Debug"))
                     {
                         draw_debug();
+
+                        ImGui::EndTabItem();
+                    }
+
+                    if (ImGui::BeginTabItem("Components"))
+                    {
+                        draw_components();
 
                         ImGui::EndTabItem();
                     }

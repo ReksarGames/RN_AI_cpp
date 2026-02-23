@@ -1,5 +1,3 @@
-﻿#include "Game_overlay.h"
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <dwmapi.h>
@@ -20,6 +18,7 @@
 #include <string>
 #include <cstdint>
 #include <chrono>
+#include <iostream>
 
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "d3d11.lib")
@@ -28,6 +27,8 @@
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "dcomp.lib")
+
+#include "Game_overlay.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -84,6 +85,11 @@ struct ImageRes
     ComPtr<ID2D1Bitmap1> bmp;
     float w = 0.f;
     float h = 0.f;
+    std::vector<uint8_t> pending;
+    int pendingW = 0;
+    int pendingH = 0;
+    int pendingStride = 0;
+    bool pendingDirty = false;
 };
 
 struct Game_overlay::Impl
@@ -113,9 +119,12 @@ struct Game_overlay::Impl
     ComPtr<IDCompositionTarget>    dcompTarget;
     ComPtr<IDCompositionVisual>    dcompRoot;
 
+    std::mutex d2dMutex;
     std::thread thread;
     std::atomic<bool> running{ false };
     std::atomic<bool> visible{ true };
+    std::atomic<bool> excludeFromCapture{ true };
+    bool appliedExcludeFromCapture = true;
     std::atomic<unsigned> maxFps{ 0 };
 
     std::mutex pendingMutex;
@@ -139,6 +148,7 @@ struct Game_overlay::Impl
     int  LoadImageFromFile(const std::wstring& path);
     void UnloadImage(int id);
     void DrawImage(int id, float x, float y, float w, float h, float opacity);
+    int  UpdateImageFromBGRA(const void* data, int width, int height, int strideBytes, int imageId);
 
     static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
     bool    CreateWindowAndDevices();
@@ -150,6 +160,7 @@ struct Game_overlay::Impl
     HRESULT CreateTextFormat(const std::wstring& font, float size, IDWriteTextFormat** out);
     HRESULT CreateTargets();
     void    ReleaseTargets();
+    void    ApplyDisplayAffinity();
 };
 
 Game_overlay::Game_overlay() : impl_(new Impl) {}
@@ -160,6 +171,8 @@ void Game_overlay::Stop() { impl_->Stop(); }
 bool Game_overlay::IsRunning() const { return impl_->running.load(); }
 void Game_overlay::SetVisible(bool v) { impl_->visible.store(v); }
 bool Game_overlay::GetVisible() const { return impl_->visible.load(); }
+void Game_overlay::SetExcludeFromCapture(bool exclude) { impl_->excludeFromCapture.store(exclude); }
+bool Game_overlay::GetExcludeFromCapture() const { return impl_->excludeFromCapture.load(); }
 void Game_overlay::UseVirtualScreen() { impl_->UseVirtualScreen(); }
 void Game_overlay::SetWindowBounds(int x, int y, int w, int h) { impl_->SetBounds(x, y, w, h); }
 void Game_overlay::SetMaxFPS(unsigned f) { impl_->maxFps.store(f); }
@@ -202,6 +215,10 @@ void Game_overlay::AddText(float x, float y, const std::wstring& text,
 int  Game_overlay::LoadImageFromFile(const std::wstring& path) { return impl_->LoadImageFromFile(path); }
 void Game_overlay::UnloadImage(int id) { impl_->UnloadImage(id); }
 void Game_overlay::DrawImage(int id, float x, float y, float w, float h, float op) { impl_->DrawImage(id, x, y, w, h, op); }
+int  Game_overlay::UpdateImageFromBGRA(const void* data, int width, int height, int strideBytes, int imageId)
+{
+    return impl_->UpdateImageFromBGRA(data, width, height, strideBytes, imageId);
+}
 
 bool Game_overlay::Impl::Start()
 {
@@ -209,16 +226,29 @@ bool Game_overlay::Impl::Start()
     running = true;
     thread = std::thread([this] {
         SetPerMonitorV2DpiAwareness();
-        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        hinst = GetModuleHandleW(nullptr);
-        if (!CreateWindowAndDevices()) {
-            running = false;
-            CoUninitialize();
-            return;
+        HRESULT cohr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        const bool coinit_ok = SUCCEEDED(cohr);
+        try
+        {
+            hinst = GetModuleHandleW(nullptr);
+            if (!CreateWindowAndDevices()) {
+                running = false;
+                if (coinit_ok) CoUninitialize();
+                return;
+            }
+            RenderLoop();
         }
-        RenderLoop();
+        catch (const std::exception& e)
+        {
+            std::cerr << "[GameOverlay] Render thread crashed: " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[GameOverlay] Render thread crashed: unknown exception." << std::endl;
+        }
         DestroyWindowAndDevices();
-        CoUninitialize();
+        if (coinit_ok) CoUninitialize();
+        running = false;
         });
     return true;
 }
@@ -261,6 +291,7 @@ HRESULT Game_overlay::Impl::EnsureWic()
 
 int Game_overlay::Impl::LoadImageFromFile(const std::wstring& path)
 {
+    if (path.empty()) return 0;
     if (FAILED(EnsureWic())) return 0;
 
     ComPtr<IWICBitmapDecoder> dec;
@@ -273,17 +304,24 @@ int Game_overlay::Impl::LoadImageFromFile(const std::wstring& path)
     ComPtr<IWICFormatConverter> conv;
     if (FAILED(wic->CreateFormatConverter(&conv))) return 0;
 
+    bool premultiplied = true;
     if (FAILED(conv->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
         WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom)))
-        return 0;
+    {
+        premultiplied = false;
+        if (FAILED(conv->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA,
+            WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom)))
+            return 0;
+    }
 
     if (!d2dCtx) return 0;
 
+    std::lock_guard<std::mutex> d2dLock(d2dMutex);
     D2D1_BITMAP_PROPERTIES1 props =
         D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_NONE,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                D2D1_ALPHA_MODE_PREMULTIPLIED),
+                premultiplied ? D2D1_ALPHA_MODE_PREMULTIPLIED : D2D1_ALPHA_MODE_IGNORE),
             96.f, 96.f);
 
     ComPtr<ID2D1Bitmap1> bmp;
@@ -313,6 +351,41 @@ void Game_overlay::Impl::DrawImage(int id, float x, float y, float w, float h, f
     c.type = DrawCmd::Image;
     c.image = { x, y, w, h, opacity, id };
     AddCmd(c);
+}
+
+int Game_overlay::Impl::UpdateImageFromBGRA(const void* data, int width, int height, int strideBytes, int imageId)
+{
+    if (!data || width <= 0 || height <= 0 || strideBytes <= 0)
+        return 0;
+
+    std::lock_guard<std::mutex> il(imgMutex);
+    ImageRes* target = nullptr;
+    if (imageId != 0)
+    {
+        auto it = images.find(imageId);
+        if (it != images.end())
+            target = &it->second;
+    }
+    if (!target)
+    {
+        imageId = nextImageId++;
+        auto [it, _] = images.emplace(imageId, ImageRes{});
+        target = &it->second;
+    }
+
+    target->pendingW = width;
+    target->pendingH = height;
+    target->pendingStride = strideBytes;
+    target->pending.resize(static_cast<size_t>(strideBytes) * static_cast<size_t>(height));
+    const uint8_t* src = static_cast<const uint8_t*>(data);
+    for (int y = 0; y < height; ++y)
+    {
+        memcpy(target->pending.data() + static_cast<size_t>(y) * strideBytes,
+            src + static_cast<size_t>(y) * strideBytes,
+            strideBytes);
+    }
+    target->pendingDirty = true;
+    return imageId;
 }
 
 LRESULT CALLBACK Game_overlay::Impl::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -376,7 +449,7 @@ bool Game_overlay::Impl::CreateWindowAndDevices()
     }
 
     ShowWindow(hwnd, SW_SHOWNA);
-    SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE); 
+    ApplyDisplayAffinity();
     SetWindowPos(hwnd, HWND_TOPMOST, winX, winY, winW, winH,
         SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
@@ -578,10 +651,26 @@ HRESULT Game_overlay::Impl::CreateTextFormat(
     return S_OK;
 }
 
+void Game_overlay::Impl::ApplyDisplayAffinity()
+{
+    if (!hwnd)
+        return;
+
+    const bool wantedExclude = excludeFromCapture.load();
+    appliedExcludeFromCapture = wantedExclude;
+    const DWORD affinity = wantedExclude ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
+    if (SetWindowDisplayAffinity(hwnd, affinity))
+        return;
+
+    if (wantedExclude)
+        SetWindowDisplayAffinity(hwnd, WDA_MONITOR);
+}
+
 void Game_overlay::Impl::RenderLoop()
 {
     running = true;
     auto last = std::chrono::high_resolution_clock::now();
+    appliedExcludeFromCapture = !excludeFromCapture.load();
 
     MSG msg{};
     while (running.load())
@@ -606,6 +695,9 @@ void Game_overlay::Impl::RenderLoop()
             if (now - last < minDelta) { Sleep(1); continue; }
             last = now;
         }
+
+        if (appliedExcludeFromCapture != excludeFromCapture.load())
+            ApplyDisplayAffinity();
         RenderOne();
     }
 }
@@ -625,8 +717,49 @@ void Game_overlay::Impl::RenderOne()
         ShowWindow(hwnd, SW_SHOWNA);
     }
 
+    std::lock_guard<std::mutex> d2dLock(d2dMutex);
     d2dCtx->BeginDraw();
     d2dCtx->Clear(D2D1::ColorF(0.f, 0.f, 0.f, 0.f));
+
+    {
+        std::lock_guard<std::mutex> il(imgMutex);
+        for (auto& kv : images)
+        {
+            auto& img = kv.second;
+            if (!img.pendingDirty || img.pending.empty())
+                continue;
+
+            D2D1_BITMAP_PROPERTIES1 props =
+                D2D1::BitmapProperties1(
+                    D2D1_BITMAP_OPTIONS_NONE,
+                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                    96.f, 96.f);
+
+            if (!img.bmp || img.w != img.pendingW || img.h != img.pendingH)
+            {
+                ComPtr<ID2D1Bitmap1> bmp;
+                HRESULT hr = d2dCtx->CreateBitmap(
+                    D2D1::SizeU(static_cast<UINT32>(img.pendingW), static_cast<UINT32>(img.pendingH)),
+                    img.pending.data(),
+                    static_cast<UINT32>(img.pendingStride),
+                    props,
+                    &bmp);
+                if (FAILED(hr))
+                    continue;
+
+                img.bmp = bmp;
+                img.w = static_cast<float>(img.pendingW);
+                img.h = static_cast<float>(img.pendingH);
+            }
+            else
+            {
+                if (FAILED(img.bmp->CopyFromMemory(nullptr, img.pending.data(), static_cast<UINT32>(img.pendingStride))))
+                    continue;
+            }
+
+            img.pendingDirty = false;
+        }
+    }
 
     auto dl = std::atomic_load_explicit(&current, std::memory_order_acquire);
     if (dl)

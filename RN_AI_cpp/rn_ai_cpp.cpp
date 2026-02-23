@@ -28,12 +28,15 @@
 #include <random>
 #include <cctype>
 #include <algorithm>
+#include <fstream>
+#include <memory>
 
 #include "capture.h"
 #include "mouse.h"
 #include "rn_ai_cpp.h"
 #include "keyboard_listener.h"
 #include "overlay.h"
+#include "Game_overlay.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
 
@@ -73,6 +76,230 @@ std::atomic<bool> input_method_changed(false);
 std::atomic<bool> zooming(false);
 std::atomic<bool> shooting(false);
 std::atomic<bool> triggerbot_button(false);
+
+Game_overlay* gameOverlayPtr = nullptr;
+
+namespace
+{
+void StopGameOverlay()
+{
+    if (gameOverlayPtr)
+    {
+        gameOverlayPtr->Stop();
+        delete gameOverlayPtr;
+        gameOverlayPtr = nullptr;
+    }
+}
+
+void GameOverlayThreadFunction()
+{
+    while (!shouldExit)
+    {
+        bool enabled = false;
+        int detRes = 320;
+        int maxFps = 0;
+        bool drawFrame = false;
+        bool drawBoxes = true;
+        bool drawFuture = true;
+        bool showCorrection = true;
+        int fa = 180, fr = 255, fg = 255, fb = 255;
+        int ba = 255, br = 0, bg = 255, bb = 0;
+        float frameThickness = 1.5f;
+        float boxThickness = 2.0f;
+        float futurePointRadius = 5.0f;
+
+        {
+            std::lock_guard<std::mutex> lock(configMutex);
+            enabled = config.game_overlay_enabled;
+            detRes = config.detection_resolution;
+            maxFps = config.game_overlay_max_fps;
+            drawFrame = config.game_overlay_draw_frame;
+            drawBoxes = config.game_overlay_draw_boxes;
+            drawFuture = config.game_overlay_draw_future;
+            showCorrection = config.game_overlay_show_target_correction;
+            fa = config.game_overlay_frame_a; fr = config.game_overlay_frame_r; fg = config.game_overlay_frame_g; fb = config.game_overlay_frame_b;
+            ba = config.game_overlay_box_a; br = config.game_overlay_box_r; bg = config.game_overlay_box_g; bb = config.game_overlay_box_b;
+            frameThickness = config.game_overlay_frame_thickness;
+            boxThickness = config.game_overlay_box_thickness;
+            futurePointRadius = config.game_overlay_future_point_radius;
+        }
+
+        if (!enabled)
+        {
+            StopGameOverlay();
+            std::this_thread::sleep_for(std::chrono::milliseconds(80));
+            continue;
+        }
+
+        if (!gameOverlayPtr)
+        {
+            gameOverlayPtr = new Game_overlay();
+            if (!gameOverlayPtr->Start())
+            {
+                delete gameOverlayPtr;
+                gameOverlayPtr = nullptr;
+                std::cerr << "[GameOverlay] Failed to start overlay window." << std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                continue;
+            }
+        }
+
+        gameOverlayPtr->SetMaxFPS(maxFps > 0 ? static_cast<unsigned>(maxFps) : 0u);
+        gameOverlayPtr->BeginFrame();
+
+        const int sw = std::max(1, screenWidth);
+        const int sh = std::max(1, screenHeight);
+        const float capW = static_cast<float>(std::max(1, detRes));
+        const float capH = static_cast<float>(std::max(1, detRes));
+        const float offX = (static_cast<float>(sw) - capW) * 0.5f;
+        const float offY = (static_cast<float>(sh) - capH) * 0.5f;
+
+        if (drawFrame)
+        {
+            gameOverlayPtr->AddRect({ offX, offY, capW, capH }, ARGB((uint8_t)fa, (uint8_t)fr, (uint8_t)fg, (uint8_t)fb), frameThickness);
+        }
+
+        std::vector<cv::Rect> boxesCopy;
+        {
+            std::lock_guard<std::mutex> lk(detectionBuffer.mutex);
+            boxesCopy = detectionBuffer.boxes;
+        }
+
+        if (drawBoxes)
+        {
+            const OverlayColor boxCol = ARGB((uint8_t)ba, (uint8_t)br, (uint8_t)bg, (uint8_t)bb);
+            for (const auto& b : boxesCopy)
+            {
+                gameOverlayPtr->AddRect(
+                    { offX + static_cast<float>(b.x), offY + static_cast<float>(b.y), static_cast<float>(b.width), static_cast<float>(b.height) },
+                    boxCol,
+                    boxThickness);
+            }
+        }
+
+        if (drawFuture && globalMouseThread)
+        {
+            const auto pts = globalMouseThread->getFuturePositions();
+            for (const auto& p : pts)
+            {
+                gameOverlayPtr->FillCircle(
+                    { offX + static_cast<float>(p.first), offY + static_cast<float>(p.second), futurePointRadius },
+                    ARGB(190, 120, 230, 120));
+            }
+        }
+
+        if (showCorrection)
+        {
+            const float cx = static_cast<float>(sw) * 0.5f;
+            const float cy = static_cast<float>(sh) * 0.5f;
+            const float scope = std::max(4.0f, static_cast<float>(config.aim_bot_scope));
+            gameOverlayPtr->AddCircle({ cx, cy, scope }, ARGB(140, 80, 120, 255), 1.5f);
+            gameOverlayPtr->AddLine({ cx - 8.0f, cy, cx + 8.0f, cy }, ARGB(200, 255, 255, 255), 1.0f);
+            gameOverlayPtr->AddLine({ cx, cy - 8.0f, cx, cy + 8.0f }, ARGB(200, 255, 255, 255), 1.0f);
+        }
+
+        gameOverlayPtr->EndFrame();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+
+    StopGameOverlay();
+}
+}
+
+namespace
+{
+class TeeStreamBuf : public std::streambuf
+{
+public:
+    TeeStreamBuf(std::streambuf* primary, std::streambuf* secondary)
+        : primary_(primary), secondary_(secondary) {}
+
+protected:
+    int overflow(int ch) override
+    {
+        if (ch == EOF)
+            return !EOF;
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        const int p = primary_ ? primary_->sputc(static_cast<char>(ch)) : ch;
+        const int s = secondary_ ? secondary_->sputc(static_cast<char>(ch)) : ch;
+        return (p == EOF || s == EOF) ? EOF : ch;
+    }
+
+    std::streamsize xsputn(const char* s, std::streamsize n) override
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (primary_)
+            primary_->sputn(s, n);
+        if (secondary_)
+            secondary_->sputn(s, n);
+        return n;
+    }
+
+    int sync() override
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        int p = primary_ ? primary_->pubsync() : 0;
+        int s = secondary_ ? secondary_->pubsync() : 0;
+        return (p == 0 && s == 0) ? 0 : -1;
+    }
+
+private:
+    std::streambuf* primary_;
+    std::streambuf* secondary_;
+    std::mutex mutex_;
+};
+
+std::mutex g_console_log_mutex;
+std::ofstream g_console_log_file;
+std::unique_ptr<TeeStreamBuf> g_cout_tee;
+std::unique_ptr<TeeStreamBuf> g_cerr_tee;
+std::streambuf* g_orig_cout = nullptr;
+std::streambuf* g_orig_cerr = nullptr;
+bool g_console_file_logging_enabled = false;
+const char* k_console_log_path = "runtime_console.log";
+}
+
+void SetConsoleFileLoggingEnabled(bool enabled, bool clear_on_enable)
+{
+    std::lock_guard<std::mutex> lock(g_console_log_mutex);
+
+    if (enabled)
+    {
+        if (g_console_file_logging_enabled)
+            return;
+
+        std::ios::openmode mode = std::ios::out | std::ios::binary;
+        mode |= clear_on_enable ? std::ios::trunc : std::ios::app;
+        g_console_log_file.open(k_console_log_path, mode);
+        if (!g_console_log_file.is_open())
+            return;
+
+        g_orig_cout = std::cout.rdbuf();
+        g_orig_cerr = std::cerr.rdbuf();
+        g_cout_tee = std::make_unique<TeeStreamBuf>(g_orig_cout, g_console_log_file.rdbuf());
+        g_cerr_tee = std::make_unique<TeeStreamBuf>(g_orig_cerr, g_console_log_file.rdbuf());
+        std::cout.rdbuf(g_cout_tee.get());
+        std::cerr.rdbuf(g_cerr_tee.get());
+        g_console_file_logging_enabled = true;
+        return;
+    }
+
+    if (!g_console_file_logging_enabled)
+        return;
+
+    if (g_orig_cout)
+        std::cout.rdbuf(g_orig_cout);
+    if (g_orig_cerr)
+        std::cerr.rdbuf(g_orig_cerr);
+
+    g_cout_tee.reset();
+    g_cerr_tee.reset();
+    if (g_console_log_file.is_open())
+        g_console_log_file.close();
+
+    g_console_file_logging_enabled = false;
+}
 
 
 //ERRORS: '(': illegal token on right side of '::'
@@ -986,6 +1213,12 @@ int main()
             return -1;
         }
 
+        // Always start each run with a fresh console log file.
+        {
+            std::ofstream clear_log(k_console_log_path, std::ios::out | std::ios::trunc);
+        }
+        SetConsoleFileLoggingEnabled(config.verbose, false);
+
         if (config.capture_method == "virtual_camera")
         {
             auto cams = VirtualCameraCapture::GetAvailableVirtualCameras();
@@ -1125,6 +1358,7 @@ int main()
 #endif
         std::thread mouseMovThread(mouseThreadFunction, std::ref(mouseThread));
         std::thread overlayThread(OverlayThread);
+        std::thread gameOverlayThread(GameOverlayThreadFunction);
 
         welcome_message();
 
@@ -1151,6 +1385,7 @@ int main()
 #endif
         mouseMovThread.join();
         overlayThread.join();
+        gameOverlayThread.join();
 
         if (arduinoSerial)
         {
@@ -1168,6 +1403,8 @@ int main()
             delete dml_detector;
             dml_detector = nullptr;
         }
+
+        SetConsoleFileLoggingEnabled(false);
 
         return 0;
     }

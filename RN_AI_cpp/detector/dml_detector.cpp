@@ -232,7 +232,11 @@ void DirectMLDetector::dmlInferenceThread()
             const std::vector<Detection>& detections = detectionsBatch.back();
 
             auto end = std::chrono::steady_clock::now();
+            lastPreprocessTimeDML = std::chrono::duration<double, std::milli>(0.0);
             lastInferenceTimeDML = end - start;
+            lastCopyTimeDML = std::chrono::duration<double, std::milli>(0.0);
+            lastPostprocessTimeDML = std::chrono::duration<double, std::milli>(0.0);
+            lastNmsTimeDML = std::chrono::duration<double, std::milli>(0.0);
 
             std::lock_guard<std::mutex> lock(detectionBuffer.mutex);
             detectionBuffer.boxes.clear();
