@@ -10,6 +10,7 @@
 #include "rn_ai_cpp.h"
 #include "overlay.h"
 #include "capture.h"
+#include "ui_sections.h"
 
 void draw_stats()
 {
@@ -56,22 +57,24 @@ void draw_stats()
     float avg_post = avg(postprocess_times, IM_ARRAYSIZE(postprocess_times));
     float avg_nms = avg(nms_times, IM_ARRAYSIZE(nms_times));
 
-    ImGui::SeparatorText("Time Breakdown");
+    if (OverlayUI::BeginSection("Time Breakdown", "stats_time"))
+    {
+        ImGui::PlotLines("Preprocess", preprocess_times, IM_ARRAYSIZE(preprocess_times), index_inf, nullptr, 0.0f, 20.0f, ImVec2(0, 40));
+        ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_preprocess, avg_preprocess);
 
-    ImGui::PlotLines("Preprocess", preprocess_times, IM_ARRAYSIZE(preprocess_times), index_inf, nullptr, 0.0f, 20.0f, ImVec2(0, 40));
-    ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_preprocess, avg_preprocess);
+        ImGui::PlotLines("Inference", inference_times, IM_ARRAYSIZE(inference_times), index_inf, nullptr, 0.0f, 20.0f, ImVec2(0, 40));
+        ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_inference, avg_inference);
 
-    ImGui::PlotLines("Inference", inference_times, IM_ARRAYSIZE(inference_times), index_inf, nullptr, 0.0f, 20.0f, ImVec2(0, 40));
-    ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_inference, avg_inference);
+        ImGui::PlotLines("Copy", copy_times, IM_ARRAYSIZE(copy_times), index_inf, nullptr, 0.0f, 10.0f, ImVec2(0, 40));
+        ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_copy, avg_copy);
 
-    ImGui::PlotLines("Copy", copy_times, IM_ARRAYSIZE(copy_times), index_inf, nullptr, 0.0f, 10.0f, ImVec2(0, 40));
-    ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_copy, avg_copy);
+        ImGui::PlotLines("Postprocess", postprocess_times, IM_ARRAYSIZE(postprocess_times), index_inf, nullptr, 0.0f, 10.0f, ImVec2(0, 40));
+        ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_post, avg_post);
 
-    ImGui::PlotLines("Postprocess", postprocess_times, IM_ARRAYSIZE(postprocess_times), index_inf, nullptr, 0.0f, 10.0f, ImVec2(0, 40));
-    ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_post, avg_post);
-
-    ImGui::PlotLines("NMS", nms_times, IM_ARRAYSIZE(nms_times), index_inf, nullptr, 0.0f, 5.0f, ImVec2(0, 40));
-    ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_nms, avg_nms);
+        ImGui::PlotLines("NMS", nms_times, IM_ARRAYSIZE(nms_times), index_inf, nullptr, 0.0f, 5.0f, ImVec2(0, 40));
+        ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_nms, avg_nms);
+    }
+    OverlayUI::EndSection();
 
     static float capture_fps_vals[120] = {};
     static int index_fps = 0;
@@ -88,10 +91,13 @@ void draw_stats()
     }
     float avg_fps = (count_fps > 0) ? (sum_fps / count_fps) : 0.0f;
 
-    ImGui::SeparatorText("Capture FPS");
-    ImGui::PlotLines("##fps_plot", capture_fps_vals, IM_ARRAYSIZE(capture_fps_vals), index_fps, nullptr, 0.0f, 144.0f, ImVec2(0, 60));
-    ImGui::SameLine();
-    ImGui::Text("Now: %.1f | Avg: %.1f", current_fps, avg_fps);
+    if (OverlayUI::BeginSection("Capture FPS", "stats_fps"))
+    {
+        ImGui::PlotLines("##fps_plot", capture_fps_vals, IM_ARRAYSIZE(capture_fps_vals), index_fps, nullptr, 0.0f, 144.0f, ImVec2(0, 60));
+        ImGui::SameLine();
+        ImGui::Text("Now: %.1f | Avg: %.1f", current_fps, avg_fps);
+    }
+    OverlayUI::EndSection();
 
     int latestWidth = 0;
     int latestHeight = 0;
@@ -120,38 +126,41 @@ void draw_stats()
         captureSource = "Camera: " + config.virtual_camera_name;
     }
 
-    ImGui::SeparatorText("Capture Details");
-    ImGui::Text("Method: %s", config.capture_method.c_str());
-    ImGui::Text("Backend: %s", config.backend.c_str());
-    ImGui::TextWrapped("Source: %s", captureSource.c_str());
-    if (latestWidth > 0 && latestHeight > 0)
-        ImGui::Text("Latest frame: %dx%d", latestWidth, latestHeight);
-    else
-        ImGui::TextDisabled("Latest frame: n/a");
-    ImGui::Text("Detection resolution: %d", config.detection_resolution);
-    ImGui::Text("Frame queue depth: %d", static_cast<int>(queueDepth));
-    ImGui::Text("Circle mask: %s", config.circle_mask ? "on" : "off");
+    if (OverlayUI::BeginSection("Capture Details", "stats_capture"))
+    {
+        ImGui::Text("Method: %s", config.capture_method.c_str());
+        ImGui::Text("Backend: %s", config.backend.c_str());
+        ImGui::TextWrapped("Source: %s", captureSource.c_str());
+        if (latestWidth > 0 && latestHeight > 0)
+            ImGui::Text("Latest frame: %dx%d", latestWidth, latestHeight);
+        else
+            ImGui::TextDisabled("Latest frame: n/a");
+        ImGui::Text("Detection resolution: %d", config.detection_resolution);
+        ImGui::Text("Frame queue depth: %d", static_cast<int>(queueDepth));
+        ImGui::Text("Circle mask: %s", config.circle_mask ? "on" : "off");
 
 #ifdef USE_CUDA
-    if (config.backend == "TRT")
-    {
-        const bool canUseCudaCapture = (config.capture_method == "duplication_api");
-        const bool directCaptureActive = canUseCudaCapture && config.capture_use_cuda && !config.circle_mask;
+        if (config.backend == "TRT")
+        {
+            const bool canUseCudaCapture = (config.capture_method == "duplication_api");
+            const bool directCaptureActive = canUseCudaCapture && config.capture_use_cuda && !config.circle_mask;
 
-        std::string directCaptureStatus;
-        if (!canUseCudaCapture)
-            directCaptureStatus = "N/A (requires duplication_api)";
-        else if (!config.capture_use_cuda)
-            directCaptureStatus = "Disabled by user";
-        else if (config.circle_mask)
-            directCaptureStatus = "CPU fallback (circle mask is enabled)";
-        else
-            directCaptureStatus = "Active";
+            std::string directCaptureStatus;
+            if (!canUseCudaCapture)
+                directCaptureStatus = "N/A (requires duplication_api)";
+            else if (!config.capture_use_cuda)
+                directCaptureStatus = "Disabled by user";
+            else if (config.circle_mask)
+                directCaptureStatus = "CPU fallback (circle mask is enabled)";
+            else
+                directCaptureStatus = "Active";
 
-        ImGui::Separator();
-        ImGui::Text("CUDA Direct Capture: %s", config.capture_use_cuda ? "enabled" : "disabled");
-        ImGui::Text("Capture pipeline: %s", directCaptureActive ? "GPU direct path" : "CPU readback");
-        ImGui::TextWrapped("Direct capture status: %s", directCaptureStatus.c_str());
-    }
+            ImGui::Separator();
+            ImGui::Text("CUDA Direct Capture: %s", config.capture_use_cuda ? "enabled" : "disabled");
+            ImGui::Text("Capture pipeline: %s", directCaptureActive ? "GPU direct path" : "CPU readback");
+            ImGui::TextWrapped("Direct capture status: %s", directCaptureStatus.c_str());
+        }
 #endif
+    }
+    OverlayUI::EndSection();
 }

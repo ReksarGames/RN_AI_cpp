@@ -16,6 +16,8 @@
 #include "virtual_camera.h"
 #include "draw_settings.h"
 #include "overlay.h"
+#include "ui_sections.h"
+#include "config_dirty.h"
 
 bool disable_winrt_futures = checkwin1903();
 int monitors = get_active_monitors();
@@ -35,262 +37,292 @@ void draw_capture_settings()
 {
     static const int allowed_resolutions[] = { 220, 320, 640 };
     static int current_resolution_idx = 1;
+    static int winrt_source_mode = 0; // 0 = monitor, 1 = window title (preview UI)
+    static char winrt_window_title_buf[128] = "";
 
     for (int i = 0; i < 3; ++i)
         if (config.detection_resolution == allowed_resolutions[i])
             current_resolution_idx = i;
 
-    if (ImGui::Combo("Detection Resolution", &current_resolution_idx, "220\0""320\0""640\0"))
+    if (OverlayUI::BeginSection("Core", "capture_core"))
     {
-        config.detection_resolution = allowed_resolutions[current_resolution_idx];
-        detection_resolution_changed.store(true);
-        detector_model_changed.store(true);
+        std::vector<std::string> captureMethodOptions = { "duplication_api", "winrt", "virtual_camera", "obs" };
+        std::vector<const char*> captureMethodItems;
+        captureMethodItems.push_back("duplication_api");
+        captureMethodItems.push_back("winrt");
+        captureMethodItems.push_back("virtual_camera");
+        captureMethodItems.push_back("obs");
 
-        globalMouseThread->updateConfig(
-            config.detection_resolution,
-            config.fovX,
-            config.fovY,
-            config.minSpeedMultiplier,
-            config.maxSpeedMultiplier,
-            config.predictionInterval,
-            config.auto_shoot,
-            config.bScope_multiplier,
-            config.triggerbot_bScope_multiplier);
-        config.saveConfig();
-    }
-
-    if (ImGui::SliderInt("Capture FPS", &config.capture_fps, 0, 400))
-    {
-        capture_fps_changed.store(true);
-        config.saveConfig();
-    }
-
-    if (config.capture_fps == 0)
-    {
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(255, 0, 0, 255), "-> Disabled");
-    }
-
-    if (config.capture_fps == 0 || config.capture_fps >= 61)
-    {
-        ImGui::TextColored(ImVec4(255, 255, 0, 255), "WARNING: A large number of FPS can negatively affect performance.");
-    }
-
-    if (ImGui::Checkbox("Circle mask", &config.circle_mask))
-    {
-        capture_method_changed.store(true);
-        config.saveConfig();
-    }
-
-#ifdef USE_CUDA
-    if (config.backend == "TRT")
-    {
-        const bool cudaCaptureAvailable = (config.capture_method == "duplication_api");
-        if (!cudaCaptureAvailable)
-            ImGui::BeginDisabled();
-
-        if (ImGui::Checkbox("Use CUDA Direct Capture", &config.capture_use_cuda))
+        int currentcaptureMethodIndex = 0;
+        for (size_t i = 0; i < captureMethodOptions.size(); ++i)
         {
-            capture_method_changed.store(true);
-            config.saveConfig();
-        }
-
-        if (!cudaCaptureAvailable)
-        {
-            ImGui::EndDisabled();
-            ImGui::TextDisabled("Available only with duplication_api.");
-        }
-    }
-#endif
-
-    std::vector<std::string> captureMethodOptions = { "duplication_api", "winrt", "virtual_camera", "obs" };
-    std::vector<const char*> captureMethodItems;
-
-    captureMethodItems.push_back("duplication_api");
-    captureMethodItems.push_back("winrt");
-    captureMethodItems.push_back("virtual_camera");
-    captureMethodItems.push_back("obs");
-
-    int currentcaptureMethodIndex = 0;
-    for (size_t i = 0; i < captureMethodOptions.size(); ++i)
-    {
-        if (captureMethodOptions[i] == config.capture_method)
-        {
-            currentcaptureMethodIndex = static_cast<int>(i);
-            break;
-        }
-    }
-
-    if (ImGui::Combo("Capture method", &currentcaptureMethodIndex, captureMethodItems.data(), static_cast<int>(captureMethodItems.size()))) {
-        config.capture_method = captureMethodOptions[currentcaptureMethodIndex];
-        config.saveConfig();
-        capture_method_changed.store(true);
-    }
-
-    if (config.capture_method == "winrt")
-    {
-        if (disable_winrt_futures)
-        {
-            ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
-        }
-
-        if (ImGui::Checkbox("Capture Borders", &config.capture_borders))
-        {
-            capture_borders_changed.store(true);
-            config.saveConfig();
-        }
-
-        if (ImGui::Checkbox("Capture Cursor", &config.capture_cursor))
-        {
-            capture_cursor_changed.store(true);
-            config.saveConfig();
-        }
-
-        if (disable_winrt_futures)
-        {
-            ImGui::PopStyleVar();
-            ImGui::PopItemFlag();
-        }
-    }
-
-    if (config.capture_method == "duplication_api" || config.capture_method == "winrt" || config.capture_method == "obs")
-    {
-        std::vector<std::string> monitorNames;
-        if (monitors == -1)
-        {
-            monitorNames.push_back("Monitor 1");
-        }
-        else
-        {
-            for (int i = -1; i < monitors; ++i)
+            if (captureMethodOptions[i] == config.capture_method)
             {
-                monitorNames.push_back("Monitor " + std::to_string(i + 1));
+                currentcaptureMethodIndex = static_cast<int>(i);
+                break;
             }
         }
 
-        std::vector<const char*> monitorItems;
-        for (const auto& name : monitorNames)
+        OverlayUI::AdaptiveItemWidth();
+        if (ImGui::Combo("Capture method", &currentcaptureMethodIndex, captureMethodItems.data(), static_cast<int>(captureMethodItems.size())))
         {
-            monitorItems.push_back(name.c_str());
+            config.capture_method = captureMethodOptions[currentcaptureMethodIndex];
+            capture_method_changed.store(true);
+            OverlayConfig_MarkDirty();
         }
 
-        if (ImGui::Combo("Capture monitor", &config.monitor_idx, monitorItems.data(), static_cast<int>(monitorItems.size())))
+        OverlayUI::AdaptiveItemWidth();
+        if (ImGui::Combo("Detection Resolution", &current_resolution_idx, "220\0""320\0""640\0"))
         {
-            config.saveConfig();
-            capture_method_changed.store(true);
+            config.detection_resolution = allowed_resolutions[current_resolution_idx];
+            detection_resolution_changed.store(true);
+            detector_model_changed.store(true);
+
+            globalMouseThread->updateConfig(
+                config.detection_resolution,
+                config.fovX,
+                config.fovY,
+                config.minSpeedMultiplier,
+                config.maxSpeedMultiplier,
+                config.predictionInterval,
+                config.auto_shoot,
+                config.bScope_multiplier,
+                config.triggerbot_bScope_multiplier);
+            OverlayConfig_MarkDirty();
         }
+
+        OverlayUI::AdaptiveItemWidth();
+        if (ImGui::SliderInt("Capture FPS", &config.capture_fps, 0, 400))
+        {
+            capture_fps_changed.store(true);
+            OverlayConfig_MarkDirty();
+        }
+
+        if (config.capture_fps == 0)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.25f, 0.25f, 1.0f), "Disabled");
+        }
+
+        if (config.capture_fps == 0 || config.capture_fps >= 61)
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.35f, 1.0f), "Warning: high FPS may reduce performance.");
+        }
+
+        if (ImGui::Checkbox("Circle mask", &config.circle_mask))
+        {
+            capture_method_changed.store(true);
+            OverlayConfig_MarkDirty();
+        }
+
+#ifdef USE_CUDA
+        if (config.backend == "TRT")
+        {
+            const bool cudaCaptureAvailable = (config.capture_method == "duplication_api");
+            if (!cudaCaptureAvailable)
+                ImGui::BeginDisabled();
+
+            if (ImGui::Checkbox("Use CUDA Direct Capture", &config.capture_use_cuda))
+            {
+                capture_method_changed.store(true);
+                OverlayConfig_MarkDirty();
+            }
+
+            if (!cudaCaptureAvailable)
+            {
+                ImGui::EndDisabled();
+                ImGui::TextDisabled("Available only with duplication_api.");
+            }
+        }
+#endif
+
+        if (config.capture_method == "duplication_api" || config.capture_method == "winrt" || config.capture_method == "obs")
+        {
+            std::vector<std::string> monitorNames;
+            if (monitors == -1)
+            {
+                monitorNames.push_back("Monitor 1");
+            }
+            else
+            {
+                for (int i = -1; i < monitors; ++i)
+                {
+                    monitorNames.push_back("Monitor " + std::to_string(i + 1));
+                }
+            }
+
+            std::vector<const char*> monitorItems;
+            for (const auto& name : monitorNames)
+            {
+                monitorItems.push_back(name.c_str());
+            }
+
+            OverlayUI::AdaptiveItemWidth();
+            if (ImGui::Combo("Capture monitor", &config.monitor_idx, monitorItems.data(), static_cast<int>(monitorItems.size())))
+            {
+                capture_method_changed.store(true);
+                OverlayConfig_MarkDirty();
+            }
+        }
+    }
+    OverlayUI::EndSection();
+
+    if (config.capture_method == "winrt")
+    {
+        if (OverlayUI::BeginSection("WinRT", "capture_winrt"))
+        {
+            OverlayUI::AdaptiveItemWidth();
+            ImGui::Combo("Source mode", &winrt_source_mode, "Monitor\0Window title (preview)\0");
+            if (winrt_source_mode == 1)
+            {
+                OverlayUI::AdaptiveItemWidth();
+                ImGui::InputText("Window title", winrt_window_title_buf, IM_ARRAYSIZE(winrt_window_title_buf));
+                ImGui::TextDisabled("Current backend uses monitor capture only.");
+            }
+
+            if (disable_winrt_futures)
+            {
+                ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+            }
+
+            if (ImGui::Checkbox("Capture Borders", &config.capture_borders))
+            {
+                capture_borders_changed.store(true);
+                OverlayConfig_MarkDirty();
+            }
+
+            if (ImGui::Checkbox("Capture Cursor", &config.capture_cursor))
+            {
+                capture_cursor_changed.store(true);
+                OverlayConfig_MarkDirty();
+            }
+
+            if (disable_winrt_futures)
+            {
+                ImGui::PopStyleVar();
+                ImGui::PopItemFlag();
+            }
+        }
+        OverlayUI::EndSection();
     }
 
     if (config.capture_method == "virtual_camera")
     {
-        ensureVirtualCamerasLoaded();
-        ImGui::Text("Select virtual camera:");
-
-        // Filter
-        ImGui::Text("Filter:");
-        if (ImGui::InputText("##VCFilter", virtual_camera_filter_buf, IM_ARRAYSIZE(virtual_camera_filter_buf)))
+        if (OverlayUI::BeginSection("Virtual Camera", "capture_virtual_camera"))
         {
+            ensureVirtualCamerasLoaded();
+            ImGui::Text("Select virtual camera:");
 
-        }
+            ImGui::Text("Filter:");
+            OverlayUI::AdaptiveItemWidth();
+            ImGui::InputText("##VCFilter", virtual_camera_filter_buf, IM_ARRAYSIZE(virtual_camera_filter_buf));
 
-        std::string filter_lower = virtual_camera_filter_buf;
-        std::transform(filter_lower.begin(), filter_lower.end(), filter_lower.begin(), ::tolower);
+            std::string filter_lower = virtual_camera_filter_buf;
+            std::transform(filter_lower.begin(), filter_lower.end(), filter_lower.begin(), ::tolower);
 
-        // Filter list
-        std::vector<int> filtered_indices;
-        for (int i = 0; i < static_cast<int>(virtual_cameras.size()); ++i)
-        {
-            std::string name_lower = virtual_cameras[i];
-            std::transform(name_lower.begin(), name_lower.end(), name_lower.begin(), ::tolower);
-            if (filter_lower.empty() || name_lower.find(filter_lower) != std::string::npos)
+            std::vector<int> filtered_indices;
+            for (int i = 0; i < static_cast<int>(virtual_cameras.size()); ++i)
             {
-                filtered_indices.push_back(i);
-            }
-        }
-
-        if (!filtered_indices.empty())
-        {
-            int currentIndex = 0;
-            for (int fi = 0; fi < static_cast<int>(filtered_indices.size()); ++fi)
-            {
-                if (virtual_cameras[filtered_indices[fi]] == config.virtual_camera_name)
+                std::string name_lower = virtual_cameras[i];
+                std::transform(name_lower.begin(), name_lower.end(), name_lower.begin(), ::tolower);
+                if (filter_lower.empty() || name_lower.find(filter_lower) != std::string::npos)
                 {
-                    currentIndex = fi;
-                    break;
+                    filtered_indices.push_back(i);
                 }
             }
 
-            // Build items
-            std::vector<const char*> items;
-            items.reserve(filtered_indices.size());
-            for (int idx : filtered_indices)
+            if (!filtered_indices.empty())
             {
-                items.push_back(virtual_cameras[idx].c_str());
+                int currentIndex = 0;
+                for (int fi = 0; fi < static_cast<int>(filtered_indices.size()); ++fi)
+                {
+                    if (virtual_cameras[filtered_indices[fi]] == config.virtual_camera_name)
+                    {
+                        currentIndex = fi;
+                        break;
+                    }
+                }
+
+                std::vector<const char*> items;
+                items.reserve(filtered_indices.size());
+                for (int idx : filtered_indices)
+                {
+                    items.push_back(virtual_cameras[idx].c_str());
+                }
+
+                OverlayUI::AdaptiveItemWidth();
+                if (ImGui::Combo("##virtual_camera_combo", &currentIndex, items.data(), static_cast<int>(items.size())))
+                {
+                    config.virtual_camera_name = virtual_cameras[filtered_indices[currentIndex]];
+                    capture_method_changed.store(true);
+                    OverlayConfig_MarkDirty();
+                }
+            }
+            else
+            {
+                ImGui::TextDisabled("No matching virtual cameras");
             }
 
-            if (ImGui::Combo("##virtual_camera_combo", &currentIndex, items.data(), static_cast<int>(items.size())))
+            ImGui::SameLine();
+            if (ImGui::Button("Refresh"))
             {
-                config.virtual_camera_name = virtual_cameras[filtered_indices[currentIndex]];
-                config.saveConfig();
+                VirtualCameraCapture::ClearCachedCameraList();
+                virtual_cameras = VirtualCameraCapture::GetAvailableVirtualCameras(true);
+                virtual_camera_filter_buf[0] = '\0';
+            }
+
+            OverlayUI::AdaptiveItemWidth();
+            if (ImGui::SliderInt("Virtual camera width", &config.virtual_camera_width, 128, 3840))
+            {
                 capture_method_changed.store(true);
+                OverlayConfig_MarkDirty();
+            }
+
+            OverlayUI::AdaptiveItemWidth();
+            if (ImGui::SliderInt("Virtual camera heigth", &config.virtual_camera_heigth, 128, 2160))
+            {
+                capture_method_changed.store(true);
+                OverlayConfig_MarkDirty();
             }
         }
-        else
-        {
-            ImGui::TextDisabled("No matching virtual cameras");
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh"))
-        {
-            VirtualCameraCapture::ClearCachedCameraList();
-            virtual_cameras = VirtualCameraCapture::GetAvailableVirtualCameras(true);
-            virtual_camera_filter_buf[0] = '\0';
-        }
-
-        if (ImGui::SliderInt("Virtual camera width", &config.virtual_camera_width, 128, 3840))
-        {
-            config.saveConfig();
-            capture_method_changed.store(true);
-        }
-
-        if (ImGui::SliderInt("Virtual camera heigth", &config.virtual_camera_heigth, 128, 2160))
-        {
-            config.saveConfig();
-            capture_method_changed.store(true);
-        }
+        OverlayUI::EndSection();
     }
 
     if (config.capture_method == "obs")
     {
-        ImGui::Separator();
-        ImGui::Text("OBS");
-        if (ImGui::Checkbox("Enable OBS", &config.is_obs))
+        if (OverlayUI::BeginSection("OBS", "capture_obs"))
         {
-            config.saveConfig();
+            if (ImGui::Checkbox("Enable OBS", &config.is_obs))
+            {
+                OverlayConfig_MarkDirty();
+            }
+            if (!obs_buf_inited)
+            {
+                strncpy_s(obs_ip_buf, sizeof(obs_ip_buf), config.obs_ip.c_str(), _TRUNCATE);
+                obs_buf_inited = true;
+            }
+            OverlayUI::AdaptiveItemWidth();
+            if (ImGui::InputText("OBS IP", obs_ip_buf, IM_ARRAYSIZE(obs_ip_buf)))
+            {
+                config.obs_ip = obs_ip_buf;
+                OverlayConfig_MarkDirty();
+            }
+            OverlayUI::AdaptiveItemWidth();
+            if (ImGui::InputInt("OBS Port", &config.obs_port))
+            {
+                if (config.obs_port < 0)
+                    config.obs_port = 0;
+                OverlayConfig_MarkDirty();
+            }
+            OverlayUI::AdaptiveItemWidth();
+            if (ImGui::InputInt("OBS FPS", &config.obs_fps))
+            {
+                if (config.obs_fps < 0)
+                    config.obs_fps = 0;
+                OverlayConfig_MarkDirty();
+            }
         }
-        if (!obs_buf_inited)
-        {
-            strncpy_s(obs_ip_buf, sizeof(obs_ip_buf), config.obs_ip.c_str(), _TRUNCATE);
-            obs_buf_inited = true;
-        }
-        if (ImGui::InputText("OBS IP", obs_ip_buf, IM_ARRAYSIZE(obs_ip_buf)))
-        {
-            config.obs_ip = obs_ip_buf;
-            config.saveConfig();
-        }
-        if (ImGui::InputInt("OBS Port", &config.obs_port))
-        {
-            if (config.obs_port < 0)
-                config.obs_port = 0;
-            config.saveConfig();
-        }
-        if (ImGui::InputInt("OBS FPS", &config.obs_fps))
-        {
-            if (config.obs_fps < 0)
-                config.obs_fps = 0;
-            config.saveConfig();
-        }
+        OverlayUI::EndSection();
     }
 }

@@ -25,6 +25,7 @@
 #include "keyboard_listener.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
+#include "config_dirty.h"
 #ifdef USE_CUDA
 #include "trt_detector.h"
 #endif
@@ -388,7 +389,8 @@ void OverlayThread()
                     {
                         BYTE opacity = config.overlay_opacity;
                         SetLayeredWindowAttributes(g_hwnd, 0, opacity, LWA_ALPHA);
-                        config.saveConfig();
+                        OverlayConfig_MarkDirty();
+                        prev_opacity = config.overlay_opacity;
                     }
 
                 ImGui::EndTabBar();
@@ -409,13 +411,17 @@ void OverlayThread()
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
+            OverlayConfig_FlushIfDue(220);
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         else
         {
+            OverlayConfig_FlushIfDue(220);
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
+
+    OverlayConfig_FlushNow();
 
     release_body_texture();
 
