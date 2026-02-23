@@ -2,6 +2,7 @@
 #define MAKCU_CONNECTION_H
 
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <string>
 
@@ -54,6 +55,10 @@ private:
     makcu::MouseButton toMouseButton(int button) const;
     makcu::Device device_;
 #else
+    bool queryButtonStateBinary(uint8_t cmd, bool& pressed);
+    bool readBinaryFrame(uint8_t expected_cmd, std::vector<uint8_t>& payload, int timeout_ms);
+    void writeBinaryCommand(uint8_t cmd, const std::vector<uint8_t>& payload);
+
     void sendCommand(const std::string& command);
     std::vector<int> splitValue(int value);
     void startListening();

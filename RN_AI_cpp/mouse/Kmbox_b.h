@@ -1,4 +1,4 @@
-/*  KmboxConnection.h  */
+﻿/*  KmboxConnection.h  */
 #ifndef KMBOXCONNECTION_H
 #define KMBOXCONNECTION_H
 

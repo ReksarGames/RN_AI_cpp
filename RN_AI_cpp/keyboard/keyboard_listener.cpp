@@ -45,6 +45,12 @@ bool prevRightArrow = false;
 
 bool isAnyKeyPressed(const std::vector<std::string>& keys)
 {
+    const bool usePhysicalDevice =
+        (kmboxNetSerial && kmboxNetSerial->isOpen()) ||
+        (kmboxSerial && kmboxSerial->isOpen()) ||
+        (makcu && makcu->isOpen()) ||
+        (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen());
+
     for (const auto& key_name : keys)
     {
         int key_code = KeyCodes::getKeyCode(key_name);
@@ -61,7 +67,6 @@ bool isAnyKeyPressed(const std::vector<std::string>& keys)
             else if(key_name == "X2MouseButton")     pressed = kmboxNetSerial->monitorMouseSide2()  == 1;
         }
 
-
         // kmbox_b button monitor
         if (!pressed && kmboxSerial && kmboxSerial->isOpen())
         {
@@ -71,6 +76,7 @@ bool isAnyKeyPressed(const std::vector<std::string>& keys)
             else if(key_name == "X1MouseButton")     pressed = kmboxSerial->side1_active;
             else if(key_name == "X2MouseButton")     pressed = kmboxSerial->side2_active;
         }
+
         // makcu button monitor
         if (!pressed && makcu && makcu->isOpen())
         {
@@ -81,15 +87,34 @@ bool isAnyKeyPressed(const std::vector<std::string>& keys)
             else if(key_name == "X2MouseButton")     pressed = makcu->side2_active;
         }
 
-        // local mouse
-        if (!pressed && key_code != -1 && (GetAsyncKeyState(key_code) & 0x8000))
-            pressed = true;
+        // arduino button monitor
+        if (!pressed && config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen())
+        {
+            if  (key_name == "LeftMouseButton")      pressed = arduinoSerial->shooting_active;
+            else if(key_name == "RightMouseButton")  pressed = arduinoSerial->zooming_active;
+            else if(key_name == "X2MouseButton")     pressed = arduinoSerial->aiming_active;
+        }
+
+        // local win32 keyboard/mouse
+        if (!pressed && key_code != -1)
+        {
+            const bool is_mouse_key =
+                (key_name == "LeftMouseButton") ||
+                (key_name == "RightMouseButton") ||
+                (key_name == "MiddleMouseButton") ||
+                (key_name == "X1MouseButton") ||
+                (key_name == "X2MouseButton");
+
+            if (!is_mouse_key || !usePhysicalDevice)
+            {
+                pressed = (GetAsyncKeyState(key_code) & 0x8000) != 0;
+            }
+        }
 
         if (pressed) return true;
     }
     return false;
 }
-
 void keyboardListener()
 {
     while (!shouldExit)
@@ -97,29 +122,17 @@ void keyboardListener()
         // Aiming
         if (!config.auto_aim)
         {
-            aiming = isAnyKeyPressed(config.button_targeting) ||
-                (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->aiming_active) ||
-                (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->aiming_active) ||
-                (kmboxNetSerial && kmboxNetSerial->isOpen() && kmboxNetSerial->aiming_active) ||
-                (makcu && makcu->isOpen() && makcu->aiming_active);
+            // Respect only configured targeting keys (from UI/config).
+            aiming = isAnyKeyPressed(config.button_targeting);
         }
         else
         {
             aiming = true;
         }
 
-        // Shooting
-        shooting = isAnyKeyPressed(config.button_shoot) ||
-            (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->shooting_active) ||
-            (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->shooting_active) ||
-            (kmboxNetSerial && kmboxNetSerial->isOpen() && kmboxNetSerial->shooting_active) ||
-            (makcu && makcu->isOpen() && makcu->shooting_active);
-
-        // Zooming
-        zooming = isAnyKeyPressed(config.button_zoom) ||
-            (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen() && arduinoSerial->zooming_active) ||
-            (kmboxSerial && kmboxSerial->isOpen() && kmboxSerial->zooming_active) ||
-            (makcu && makcu->isOpen() && makcu->zooming_active);
+        // Respect only configured key lists for shoot/zoom as well.
+        shooting = isAnyKeyPressed(config.button_shoot);
+        zooming = isAnyKeyPressed(config.button_zoom);
 
         // Triggerbot button should reflect current physical state (no latch).
         {

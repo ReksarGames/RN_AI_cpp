@@ -24,7 +24,6 @@ int prev_smoothness = config.smoothness;
 static bool  prev_use_smoothing = config.use_smoothing;
 static bool  prev_use_kalman = config.use_kalman;
 static bool  prev_tracking_smoothing = config.tracking_smoothing;
-// TODO: ????????? static, focuse_target ?? ???????????, ?????? ????? ???????????.
 float prev_kalman_process_noise = config.kalman_process_noise;
 float prev_kalman_measure_noise = config.kalman_measurement_noise;
 float prev_reset_threshold = config.resetThreshold;

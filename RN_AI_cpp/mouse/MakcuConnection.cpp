@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <iostream>
 #include <mutex>
@@ -251,9 +252,16 @@ void MakcuConnection::onButtonCallback(makcu::MouseButton button, bool pressed)
 /* ---------- Serial fallback constants ---------------------------- */
 static const uint32_t BOOT_BAUD = 115200;
 static const uint32_t WORK_BAUD = 4000000;
+static const uint8_t FRAME_START = 0x50;
 
 static const uint8_t BAUD_CHANGE_CMD[9] =
 { 0xDE, 0xAD, 0x05, 0x00, 0xA5, 0x00, 0x09, 0x3D, 0x00 };
+
+static const uint8_t CMD_LEFT = 0x08;
+static const uint8_t CMD_RIGHT = 0x11;
+static const uint8_t CMD_MIDDLE = 0x0A;
+static const uint8_t CMD_SIDE1 = 0x12;
+static const uint8_t CMD_SIDE2 = 0x13;
 
 MakcuConnection::MakcuConnection(const std::string& port, unsigned int /*baud_rate*/)
     : is_open_(false)
@@ -268,7 +276,7 @@ MakcuConnection::MakcuConnection(const std::string& port, unsigned int /*baud_ra
     , right_active(false)
     , middle_active(false)
 {
-    std::cerr << "[Makcu] SDK header not found. Using serial fallback parser." << std::endl;
+    std::cerr << "[Makcu] SDK header not found. Using serial fallback (byte parser)." << std::endl;
 
     try {
         serial_.setPort(port);
@@ -383,6 +391,113 @@ void MakcuConnection::send_stop()
     write("\x03\x03");
 }
 
+void MakcuConnection::writeBinaryCommand(uint8_t cmd, const std::vector<uint8_t>& payload)
+{
+    if (!is_open_)
+        return;
+
+    const uint16_t len = static_cast<uint16_t>(payload.size());
+    std::vector<uint8_t> frame;
+    frame.reserve(4 + payload.size());
+    frame.push_back(FRAME_START);
+    frame.push_back(cmd);
+    frame.push_back(static_cast<uint8_t>(len & 0xFF));
+    frame.push_back(static_cast<uint8_t>((len >> 8) & 0xFF));
+    frame.insert(frame.end(), payload.begin(), payload.end());
+    serial_.write(frame.data(), frame.size());
+}
+
+bool MakcuConnection::readBinaryFrame(uint8_t expected_cmd, std::vector<uint8_t>& payload, int timeout_ms)
+{
+    payload.clear();
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+
+    enum class ParseState { WaitStart, WaitCmd, WaitLenLo, WaitLenHi, WaitPayload };
+    ParseState state = ParseState::WaitStart;
+    uint16_t length = 0;
+    size_t read_count = 0;
+
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        if (!serial_.available())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
+
+        uint8_t byte = 0;
+        serial_.read(&byte, 1);
+
+        switch (state)
+        {
+        case ParseState::WaitStart:
+            if (byte == FRAME_START)
+                state = ParseState::WaitCmd;
+            break;
+
+        case ParseState::WaitCmd:
+            if (byte != expected_cmd)
+            {
+                state = (byte == FRAME_START) ? ParseState::WaitCmd : ParseState::WaitStart;
+                break;
+            }
+            state = ParseState::WaitLenLo;
+            break;
+
+        case ParseState::WaitLenLo:
+            length = byte;
+            state = ParseState::WaitLenHi;
+            break;
+
+        case ParseState::WaitLenHi:
+            length |= static_cast<uint16_t>(byte) << 8;
+            payload.assign(length, 0);
+            read_count = 0;
+            if (length == 0)
+                return true;
+            state = ParseState::WaitPayload;
+            break;
+
+        case ParseState::WaitPayload:
+            payload[read_count++] = byte;
+            if (read_count >= length)
+                return true;
+            break;
+        }
+    }
+
+    return false;
+}
+
+bool MakcuConnection::queryButtonStateBinary(uint8_t cmd, bool& pressed)
+{
+    pressed = false;
+    if (!is_open_)
+        return false;
+
+    try
+    {
+        std::lock_guard<std::mutex> lock(write_mutex_);
+        writeBinaryCommand(cmd, {});
+
+        std::vector<uint8_t> payload;
+        if (!readBinaryFrame(cmd, payload, 30))
+            return false;
+
+        if (payload.empty())
+            return false;
+
+        // 0=none, 1=raw, 2=injected, 3=both
+        pressed = payload[0] != 0;
+        return true;
+    }
+    catch (...)
+    {
+        is_open_ = false;
+        return false;
+    }
+}
+
 void MakcuConnection::sendCommand(const std::string& cmd) { write(cmd + "\r\n"); }
 std::vector<int> MakcuConnection::splitValue(int) { return {}; }
 
@@ -397,14 +512,9 @@ void MakcuConnection::startListening()
 
 void MakcuConnection::listeningThreadFunc()
 {
-    constexpr uint8_t button_mask = 0x3F;
-    auto popcount8 = [](uint8_t v) {
-        v = (v & 0x55) + ((v >> 1) & 0x55);
-        v = (v & 0x33) + ((v >> 2) & 0x33);
-        return static_cast<int>((v + (v >> 4)) & 0x0F);
-    };
-
-    uint8_t last_buttons = 0;
+    // Kmbox-like parser logic for Makcu fallback.
+    // Allowed bits: 0x01 (LMB), 0x02 (RMB), 0x08 (side1 trigger), 0x10 (side2 aim)
+    constexpr uint8_t allowed_mask = 0x01 | 0x02 | 0x08 | 0x10;
 
     while (listening_ && is_open_) {
         try {
@@ -416,46 +526,28 @@ void MakcuConnection::listeningThreadFunc()
             uint8_t b = 0;
             serial_.read(&b, 1);
 
-            const uint8_t filtered = static_cast<uint8_t>(b & button_mask);
-            const int bit_cnt = popcount8(filtered);
-            const bool valid_empty = filtered == 0x00;
-            const bool valid_single = (filtered <= 0x1F) && (bit_cnt == 1);
-
-            if (valid_empty) {
-                last_buttons = 0;
-            }
-            else if (valid_single) {
-                last_buttons = filtered;
-            }
-            else {
+            // Drop byte if it contains unexpected bits.
+            if (b & ~allowed_mask)
                 continue;
-            }
 
-            const uint8_t previous_buttons = static_cast<uint8_t>((left_active ? 0x01 : 0x00) |
-                                                                   (right_active ? 0x02 : 0x00) |
-                                                                   (middle_active ? 0x04 : 0x00) |
-                                                                   (side1_active ? 0x08 : 0x00) |
-                                                                   (side2_active ? 0x10 : 0x00));
-
-            left_active = (last_buttons & 0x01) != 0;
-            right_active = (last_buttons & 0x02) != 0;
-            middle_active = (last_buttons & 0x04) != 0;
-            side1_active = (last_buttons & 0x08) != 0;
-            side2_active = (last_buttons & 0x10) != 0;
+            left_active = (b & 0x01) != 0;
+            right_active = (b & 0x02) != 0;
+            middle_active = false;
+            side1_active = (b & 0x08) != 0;
+            side2_active = (b & 0x10) != 0;
 
             shooting_active = left_active;
-            aiming_active = side2_active;
-            zooming_active = middle_active;
+            zooming_active = right_active;
             triggerbot_active = side1_active;
+            aiming_active = side2_active;
 
-            triggerbot_button.store(triggerbot_active);
             shooting.store(shooting_active);
-            aiming.store(aiming_active);
             zooming.store(zooming_active);
+            triggerbot_button.store(triggerbot_active);
+            aiming.store(aiming_active);
 
-            if (last_buttons != previous_buttons) {
-                logMakcuButtons("serial", *this, static_cast<int>(b));
-            }
+            logMakcuButtons("serial", *this, static_cast<int>(b));
+
         }
         catch (...) {
             is_open_ = false;
@@ -464,8 +556,71 @@ void MakcuConnection::listeningThreadFunc()
     }
 }
 
-void MakcuConnection::processIncomingLine(const std::string&)
+void MakcuConnection::processIncomingLine(const std::string& line)
 {
+    std::string token;
+    token.reserve(8);
+
+    for (char ch : line)
+    {
+        const unsigned char c = static_cast<unsigned char>(ch);
+        if (std::isdigit(c))
+        {
+            token.push_back(static_cast<char>(c));
+            continue;
+        }
+
+        if (!token.empty())
+            break;
+    }
+
+    if (token.empty())
+        return;
+
+    int value = -1;
+    try
+    {
+        value = std::stoi(token);
+    }
+    catch (...)
+    {
+        return;
+    }
+
+    if (value < 0 || value > 63)
+        return;
+
+    const uint8_t last_buttons = static_cast<uint8_t>(value & 0x3F);
+    const uint8_t previous_buttons = static_cast<uint8_t>((left_active ? 0x01 : 0x00) |
+        (right_active ? 0x02 : 0x00) |
+        (middle_active ? 0x04 : 0x00) |
+        (side1_active ? 0x08 : 0x00) |
+        (side2_active ? 0x10 : 0x00));
+
+    left_active = (last_buttons & 0x01) != 0;
+    right_active = (last_buttons & 0x02) != 0;
+    middle_active = (last_buttons & 0x04) != 0;
+    side1_active = (last_buttons & 0x08) != 0;
+    side2_active = (last_buttons & 0x10) != 0;
+
+    shooting_active = left_active;
+    aiming_active = side2_active;
+    zooming_active = right_active;
+    triggerbot_active = side1_active;
+
+    triggerbot_button.store(triggerbot_active);
+    shooting.store(shooting_active);
+    aiming.store(aiming_active);
+    zooming.store(zooming_active);
+
+    const uint8_t current_buttons = static_cast<uint8_t>((left_active ? 0x01 : 0x00) |
+        (right_active ? 0x02 : 0x00) |
+        (middle_active ? 0x04 : 0x00) |
+        (side1_active ? 0x08 : 0x00) |
+        (side2_active ? 0x10 : 0x00));
+
+    if (current_buttons != previous_buttons)
+        logMakcuButtons("serial", *this, value);
 }
 
 #endif

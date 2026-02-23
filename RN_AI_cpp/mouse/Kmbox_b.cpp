@@ -1,4 +1,4 @@
-/*  KmboxConnection.cpp  */
+ï»¿/*  KmboxConnection.cpp  */
 #define WIN32_LEAN_AND_MEAN
 #define _WINSOCKAPI_
 #include <windows.h>
@@ -25,7 +25,12 @@ KmboxConnection::KmboxConnection(const std::string& port, unsigned int /*baud_ra
     listening_(false),
     aiming_active(false),
     shooting_active(false),
-    zooming_active(false)
+    zooming_active(false),
+    side1_active(false),
+    side2_active(false),
+    left_active(false),
+    right_active(false),
+    middle_active(false)
 {
     try {
         /* 1. ????????? ???? @115 200 */
@@ -35,7 +40,7 @@ KmboxConnection::KmboxConnection(const std::string& port, unsigned int /*baud_ra
         if (!serial_.isOpen())
             throw std::runtime_error("open failed");
 
-        /* 2. ???????? ????? — MCU ??????????????? @4 ???? */
+        /* 2. ???????? ????? â€” MCU ??????????????? @4 ???? */
         serial_.write(BAUD_CHANGE_CMD, sizeof(BAUD_CHANGE_CMD));
         serial_.close();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -145,14 +150,8 @@ void KmboxConnection::startListening()
 
 void KmboxConnection::listeningThreadFunc()
 {
-    // ???? 0..5: ???/???/???/Side4/Side5 (+ ????? 0x20)
-    constexpr uint8_t button_mask = 0x3F;
-    auto popcount8 = [](uint8_t v) {
-        v = (v & 0x55) + ((v >> 1) & 0x55);
-        v = (v & 0x33) + ((v >> 2) & 0x33);
-        return static_cast<int>((v + (v >> 4)) & 0x0F);
-    };
-    uint8_t last_buttons = 0;
+    // allowed bits: 0x01 (LMB), 0x02 (RMB), 0x10 (side2)
+    constexpr uint8_t allowed_mask = 0x01 | 0x02 | 0x10;
 
     while (listening_ && is_open_) {
         try {
@@ -163,30 +162,25 @@ void KmboxConnection::listeningThreadFunc()
             uint8_t b = 0;
             serial_.read(&b, 1);
 
-            const uint8_t filtered = b & button_mask;
-            const int bit_cnt = popcount8(filtered);
-            const bool valid_empty = filtered == 0x00;
-            const bool valid_single = (filtered <= 0x1F) && (bit_cnt == 1);
-
-            if (valid_empty) {
-                last_buttons = 0;
-            }
-            else if (valid_single) {
-                last_buttons = filtered;
-            }
-            else {
-                // ??????? ????? — ?? ??????? ?????????
+            // drop byte if it contains unexpected bits
+            if (b & ~allowed_mask)
                 continue;
-            }
 
-            /* ????????? ????? */
-            shooting_active = last_buttons & 0x01;   // ???
-            aiming_active = last_buttons & 0x10;   // ??????? (mouse5)
-            triggerbot_button.store(static_cast<bool>(last_buttons & 0x08)); // mouse4 -> ??????????
+            // update state flags
+            shooting_active = (b & 0x01) != 0; // LMB
+            zooming_active = (b & 0x02) != 0;  // RMB
+            aiming_active = (b & 0x10) != 0;   // side2
+
+            left_active = shooting_active;
+            right_active = zooming_active;
+            middle_active = false;
+            side1_active = false;
+            side2_active = aiming_active;
+
             shooting.store(shooting_active);
             aiming.store(aiming_active);
 
-            /* ?????????? ????? */
+            // debug output
             std::cout << "LMB: " << (shooting_active ? "PRESS" : "release")
                 << " | SIDE: " << (aiming_active ? "PRESS" : "release")
                 << '\n';
