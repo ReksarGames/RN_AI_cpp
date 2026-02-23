@@ -3,6 +3,9 @@
 #include <winsock2.h>
 #include <Windows.h>
 
+#include <algorithm>
+#include <string>
+
 #include "imgui/imgui.h"
 #include "rn_ai_cpp.h"
 #include "overlay.h"
@@ -10,7 +13,6 @@
 
 void draw_stats()
 {
-    // all stages
     static float preprocess_times[120] = {};
     static float inference_times[120] = {};
     static float copy_times[120] = {};
@@ -24,14 +26,7 @@ void draw_stats()
     float current_post = 0.0f;
     float current_nms = 0.0f;
 
-    if (config.backend == "DML" && dml_detector)
-    {
-        //current_preprocess = static_cast<float>(dml_detector->lastPreprocessTimeDML.count());
-        //current_inference = static_cast<float>(dml_detector->lastInferenceTimeDML.count());
-        //current_copy = static_cast<float>(dml_detector->lastCopyTimeDML.count());
-        //current_post = static_cast<float>(dml_detector->lastPostprocessTimeDML.count());
-        //current_nms = static_cast<float>(dml_detector->lastNmsTimeDML.count());
-    }
+    if (config.backend == "DML" && dml_detector) {}
 #ifdef USE_CUDA
     else
     {
@@ -53,7 +48,7 @@ void draw_stats()
         float sum = 0.0f; int cnt = 0;
         for (int i = 0; i < n; ++i) if (arr[i] > 0.0f) { sum += arr[i]; ++cnt; }
         return cnt ? sum / cnt : 0.0f;
-        };
+    };
 
     float avg_preprocess = avg(preprocess_times, IM_ARRAYSIZE(preprocess_times));
     float avg_inference = avg(inference_times, IM_ARRAYSIZE(inference_times));
@@ -78,7 +73,6 @@ void draw_stats()
     ImGui::PlotLines("NMS", nms_times, IM_ARRAYSIZE(nms_times), index_inf, nullptr, 0.0f, 5.0f, ImVec2(0, 40));
     ImGui::SameLine(); ImGui::Text("%.2f | Avg: %.2f", current_nms, avg_nms);
 
-    // Capture FPS
     static float capture_fps_vals[120] = {};
     static int index_fps = 0;
 
@@ -98,4 +92,66 @@ void draw_stats()
     ImGui::PlotLines("##fps_plot", capture_fps_vals, IM_ARRAYSIZE(capture_fps_vals), index_fps, nullptr, 0.0f, 144.0f, ImVec2(0, 60));
     ImGui::SameLine();
     ImGui::Text("Now: %.1f | Avg: %.1f", current_fps, avg_fps);
+
+    int latestWidth = 0;
+    int latestHeight = 0;
+    size_t queueDepth = 0;
+    {
+        std::lock_guard<std::mutex> lk(frameMutex);
+        if (!latestFrame.empty())
+        {
+            latestWidth = latestFrame.cols;
+            latestHeight = latestFrame.rows;
+        }
+        queueDepth = frameQueue.size();
+    }
+
+    std::string captureSource = "Unknown";
+    if (config.capture_method == "duplication_api" || config.capture_method == "obs")
+    {
+        captureSource = "Monitor " + std::to_string(std::max(0, config.monitor_idx) + 1);
+    }
+    else if (config.capture_method == "winrt")
+    {
+        captureSource = "WinRT";
+    }
+    else if (config.capture_method == "virtual_camera")
+    {
+        captureSource = "Camera: " + config.virtual_camera_name;
+    }
+
+    ImGui::SeparatorText("Capture Details");
+    ImGui::Text("Method: %s", config.capture_method.c_str());
+    ImGui::Text("Backend: %s", config.backend.c_str());
+    ImGui::TextWrapped("Source: %s", captureSource.c_str());
+    if (latestWidth > 0 && latestHeight > 0)
+        ImGui::Text("Latest frame: %dx%d", latestWidth, latestHeight);
+    else
+        ImGui::TextDisabled("Latest frame: n/a");
+    ImGui::Text("Detection resolution: %d", config.detection_resolution);
+    ImGui::Text("Frame queue depth: %d", static_cast<int>(queueDepth));
+    ImGui::Text("Circle mask: %s", config.circle_mask ? "on" : "off");
+
+#ifdef USE_CUDA
+    if (config.backend == "TRT")
+    {
+        const bool canUseCudaCapture = (config.capture_method == "duplication_api");
+        const bool directCaptureActive = canUseCudaCapture && config.capture_use_cuda && !config.circle_mask;
+
+        std::string directCaptureStatus;
+        if (!canUseCudaCapture)
+            directCaptureStatus = "N/A (requires duplication_api)";
+        else if (!config.capture_use_cuda)
+            directCaptureStatus = "Disabled by user";
+        else if (config.circle_mask)
+            directCaptureStatus = "CPU fallback (circle mask is enabled)";
+        else
+            directCaptureStatus = "Active";
+
+        ImGui::Separator();
+        ImGui::Text("CUDA Direct Capture: %s", config.capture_use_cuda ? "enabled" : "disabled");
+        ImGui::Text("Capture pipeline: %s", directCaptureActive ? "GPU direct path" : "CPU readback");
+        ImGui::TextWrapped("Direct capture status: %s", directCaptureStatus.c_str());
+    }
+#endif
 }

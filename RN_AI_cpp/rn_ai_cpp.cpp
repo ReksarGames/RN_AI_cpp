@@ -58,7 +58,7 @@ std::thread color_detThread;
 SerialConnection* arduinoSerial = nullptr;
 KmboxConnection* kmboxSerial = nullptr;
 KmboxNetConnection* kmboxNetSerial = nullptr;
-MakcuConnection* makcu = nullptr;
+MakcuConnection* makcu_conn = nullptr;
 
 std::atomic<bool> detection_resolution_changed(false);
 std::atomic<bool> capture_method_changed(false);
@@ -99,10 +99,10 @@ void createInputDevices()
         kmboxSerial = nullptr;
     }
 
-    if (makcu)
+    if (makcu_conn)
     {
-        delete makcu;
-        makcu = nullptr;
+        delete makcu_conn;
+        makcu_conn = nullptr;
     }
 
     if (kmboxNetSerial)
@@ -140,12 +140,12 @@ void createInputDevices()
     else if (config.input_method == "MAKCU")
     {
         std::cout << "[Mouse] Using Makcu method input." << std::endl;
-        makcu = new MakcuConnection(config.makcu_port, config.makcu_baudrate);
-        if (!makcu->isOpen())
+        makcu_conn = new MakcuConnection(config.makcu_port, config.makcu_baudrate);
+        if (!makcu_conn->isOpen())
         {
             std::cerr << "[Makcu] Error connecting to Makcu." << std::endl;
-            delete makcu;
-            makcu = nullptr;
+            delete makcu_conn;
+            makcu_conn = nullptr;
         }
     }
     else
@@ -162,7 +162,7 @@ void assignInputDevices()
         globalMouseThread->setSerialConnection(arduinoSerial);
         globalMouseThread->setKmboxConnection(kmboxSerial);
         globalMouseThread->setKmboxNetConnection(kmboxNetSerial);
-        globalMouseThread->setMakcuConnection(makcu);
+        globalMouseThread->setMakcuConnection(makcu_conn);
     }
 }
 
@@ -173,9 +173,9 @@ void handleEasyNoRecoil(MouseThread& mouseThread)
         std::lock_guard<std::mutex> lock(mouseThread.input_method_mutex);
         int recoil_compensation = static_cast<int>(config.easynorecoilstrength);
         
-        if (makcu)
+        if (makcu_conn)
         {
-            makcu->move(0, recoil_compensation);
+            makcu_conn->move(0, recoil_compensation);
         }
         else if (arduinoSerial)
         {
@@ -1043,7 +1043,7 @@ int main()
             arduinoSerial,
             kmboxSerial,
             kmboxNetSerial,
-            makcu
+            makcu_conn
         );
 
         mouseThread.setUseSmoothing(config.use_smoothing);
@@ -1157,10 +1157,10 @@ int main()
             delete arduinoSerial;
         }
 
-        if (makcu)
+        if (makcu_conn)
         {
-            delete makcu;
-            makcu = nullptr;
+            delete makcu_conn;
+            makcu_conn = nullptr;
         }
 
         if (dml_detector)

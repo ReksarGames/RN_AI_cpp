@@ -188,6 +188,7 @@ bool Config::loadConfig(const std::string& filename)
 #ifdef USE_CUDA
         use_cuda_graph = false;
         use_pinned_memory = false;
+        capture_use_cuda = true;
 #endif
 
         // Buttons
@@ -634,6 +635,7 @@ bool Config::loadConfig(const std::string& filename)
 #ifdef USE_CUDA
     use_cuda_graph = get_bool("use_cuda_graph", false);
     use_pinned_memory = get_bool("use_pinned_memory", true);
+    capture_use_cuda = get_bool("capture_use_cuda", true);
 #endif
 
     // Buttons
@@ -840,7 +842,8 @@ bool Config::saveConfig(const std::string& filename)
 #ifdef USE_CUDA
     file << "\n# CUDA\n"
         << "use_cuda_graph = " << (use_cuda_graph ? "true" : "false") << "\n"
-        << "use_pinned_memory = " << (use_pinned_memory ? "true" : "false") << "\n\n";
+        << "use_pinned_memory = " << (use_pinned_memory ? "true" : "false") << "\n"
+        << "capture_use_cuda = " << (capture_use_cuda ? "true" : "false") << "\n\n";
 #endif
 
     // Buttons

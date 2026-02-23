@@ -82,6 +82,27 @@ void draw_capture_settings()
         config.saveConfig();
     }
 
+#ifdef USE_CUDA
+    if (config.backend == "TRT")
+    {
+        const bool cudaCaptureAvailable = (config.capture_method == "duplication_api");
+        if (!cudaCaptureAvailable)
+            ImGui::BeginDisabled();
+
+        if (ImGui::Checkbox("Use CUDA Direct Capture", &config.capture_use_cuda))
+        {
+            capture_method_changed.store(true);
+            config.saveConfig();
+        }
+
+        if (!cudaCaptureAvailable)
+        {
+            ImGui::EndDisabled();
+            ImGui::TextDisabled("Available only with duplication_api.");
+        }
+    }
+#endif
+
     std::vector<std::string> captureMethodOptions = { "duplication_api", "winrt", "virtual_camera", "obs" };
     std::vector<const char*> captureMethodItems;
 

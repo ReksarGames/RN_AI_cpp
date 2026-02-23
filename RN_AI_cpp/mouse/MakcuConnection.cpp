@@ -15,6 +15,9 @@
 #include "MakcuConnection.h"
 #include "config.h"
 #include "rn_ai_cpp.h"
+#ifdef makcu
+#undef makcu
+#endif
 
 namespace {
 std::mutex g_makcu_state_log_mutex;
@@ -44,6 +47,7 @@ void logMakcuButtons(const char* source, const MakcuConnection& connection, int 
 
 MakcuConnection::MakcuConnection(const std::string& port, unsigned int baud_rate)
     : is_open_(false)
+    , sdk_listening_(false)
     , aiming_active(false)
     , shooting_active(false)
     , zooming_active(false)
@@ -75,6 +79,7 @@ MakcuConnection::MakcuConnection(const std::string& port, unsigned int baud_rate
 
             is_open_ = true;
             std::cout << "[Makcu] Connected! PORT: " << port << std::endl;
+            startSdkPolling();
         }
         else
         {
@@ -93,6 +98,7 @@ MakcuConnection::MakcuConnection(const std::string& port, unsigned int baud_rate
 
 MakcuConnection::~MakcuConnection()
 {
+    stopSdkPolling();
     try
     {
         device_.enableButtonMonitoring(false);
@@ -245,6 +251,65 @@ void MakcuConnection::onButtonCallback(makcu::MouseButton button, bool pressed)
     }
 
     logMakcuButtons("callback", *this, static_cast<int>(button));
+}
+
+void MakcuConnection::applyButtonMask(uint8_t mask, const char* source)
+{
+    left_active = (mask & 0x01) != 0;
+    right_active = (mask & 0x02) != 0;
+    middle_active = (mask & 0x04) != 0;
+    side1_active = (mask & 0x08) != 0;
+    side2_active = (mask & 0x10) != 0;
+
+    shooting_active = left_active;
+    zooming_active = right_active;
+    triggerbot_active = side1_active;
+    aiming_active = side2_active;
+
+    shooting.store(shooting_active);
+    zooming.store(zooming_active);
+    triggerbot_button.store(triggerbot_active);
+    aiming.store(aiming_active);
+
+    logMakcuButtons(source, *this, static_cast<int>(mask));
+}
+
+void MakcuConnection::startSdkPolling()
+{
+    sdk_listening_ = true;
+    if (sdk_listening_thread_.joinable())
+        sdk_listening_thread_.join();
+    sdk_listening_thread_ = std::thread(&MakcuConnection::sdkPollingThreadFunc, this);
+}
+
+void MakcuConnection::stopSdkPolling()
+{
+    sdk_listening_ = false;
+    if (sdk_listening_thread_.joinable())
+        sdk_listening_thread_.join();
+}
+
+void MakcuConnection::sdkPollingThreadFunc()
+{
+    uint8_t last_mask = 0xFF;
+    while (sdk_listening_ && isOpen())
+    {
+        try
+        {
+            const uint8_t mask = device_.getButtonMask();
+            if (mask != last_mask)
+            {
+                applyButtonMask(mask, "sdk-mask");
+                last_mask = mask;
+            }
+        }
+        catch (...)
+        {
+            is_open_ = false;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
 }
 
 #else

@@ -5,16 +5,13 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <thread>
 
-#if __has_include("Makcu.h")
-#include "Makcu.h"
-#define RN_MAKCU_SDK_AVAILABLE 1
-#elif __has_include("../modules/makcu/include/makcu.h")
+#if __has_include("../modules/makcu/include/makcu.h")
 #include "../modules/makcu/include/makcu.h"
 #define RN_MAKCU_SDK_AVAILABLE 1
 #else
 #define RN_MAKCU_SDK_AVAILABLE 0
-#include <thread>
 #include <vector>
 #include "serial/serial.h"
 #endif
@@ -51,9 +48,15 @@ public:
 
 private:
 #if RN_MAKCU_SDK_AVAILABLE
+    void startSdkPolling();
+    void stopSdkPolling();
+    void sdkPollingThreadFunc();
+    void applyButtonMask(uint8_t mask, const char* source);
     void onButtonCallback(makcu::MouseButton button, bool pressed);
     makcu::MouseButton toMouseButton(int button) const;
     makcu::Device device_;
+    std::atomic<bool> sdk_listening_;
+    std::thread sdk_listening_thread_;
 #else
     bool queryButtonStateBinary(uint8_t cmd, bool& pressed);
     bool readBinaryFrame(uint8_t expected_cmd, std::vector<uint8_t>& payload, int timeout_ms);

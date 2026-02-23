@@ -15,6 +15,9 @@
 #include "capture.h"
 #include "SerialConnection.h"
 #include "rn_ai_cpp.h"
+#ifdef makcu
+#undef makcu
+#endif
 
 MouseThread::MouseThread(
     int resolution,

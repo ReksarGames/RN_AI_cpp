@@ -10,6 +10,7 @@
 #include <chrono>
 #include <timeapi.h>
 #include <condition_variable>
+#include <optional>
 
 #include "capture.h"
 #ifdef USE_CUDA
@@ -67,7 +68,7 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
         IScreenCapture* capturer = nullptr;
         if (config.capture_method == "duplication_api" || config.capture_method == "obs")
         {
-            capturer = new DuplicationAPIScreenCapture(CAPTURE_WIDTH, CAPTURE_HEIGHT);
+            capturer = new DuplicationAPIScreenCapture(CAPTURE_WIDTH, CAPTURE_HEIGHT, config.monitor_idx);
             if (config.verbose)
                 std::cout << "[Capture] Using Duplication API" << std::endl;
         }
@@ -91,7 +92,7 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
         {
             config.capture_method = "duplication_api";
             config.saveConfig();
-            capturer = new DuplicationAPIScreenCapture(CAPTURE_WIDTH, CAPTURE_HEIGHT);
+            capturer = new DuplicationAPIScreenCapture(CAPTURE_WIDTH, CAPTURE_HEIGHT, config.monitor_idx);
             std::cout << "[Capture] Unknown capture_method. Set to duplication_api by default." << std::endl;
         }
 
@@ -137,7 +138,8 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
             if (detection_resolution_changed.load() ||
                 capture_method_changed.load() ||
                 capture_cursor_changed.load() ||
-                capture_borders_changed.load())
+                capture_borders_changed.load() ||
+                capture_window_changed.load())
             {
                 delete capturer;
                 capturer = nullptr;
@@ -147,7 +149,7 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
 
                 if (config.capture_method == "duplication_api" || config.capture_method == "obs")
                 {
-                    capturer = new DuplicationAPIScreenCapture(newWidth, newHeight);
+                    capturer = new DuplicationAPIScreenCapture(newWidth, newHeight, config.monitor_idx);
                     if (config.verbose)
                         std::cout << "[Capture] Re-init with Duplication API." << std::endl;
                 }
@@ -170,7 +172,7 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
                 {
                     config.capture_method = "duplication_api";
                     config.saveConfig();
-                    capturer = new DuplicationAPIScreenCapture(newWidth, newHeight);
+                    capturer = new DuplicationAPIScreenCapture(newWidth, newHeight, config.monitor_idx);
                     std::cout << "[Capture] Unknown capture_method. Set to duplication_api." << std::endl;
                 }
 
@@ -178,9 +180,36 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
                 capture_method_changed.store(false);
                 capture_cursor_changed.store(false);
                 capture_borders_changed.store(false);
+                capture_window_changed.store(false);
             }
 
             cv::Mat screenshotCpu;
+            bool frameSubmittedToDetector = false;
+
+#ifdef USE_CUDA
+            const bool preferGpuCapturePath =
+                config.backend == "TRT" &&
+                config.capture_method == "duplication_api" &&
+                config.capture_use_cuda &&
+                !config.circle_mask;
+            if (preferGpuCapturePath)
+            {
+                std::lock_guard<std::mutex> lock(capturerMutex);
+                auto* duplicationCapture = dynamic_cast<DuplicationAPIScreenCapture*>(capturer);
+                if (duplicationCapture)
+                {
+                    cv::cuda::GpuMat gpuFrame;
+                    if (duplicationCapture->GetNextFrameGpu(gpuFrame))
+                    {
+                        trt_detector.processFrameGpu(gpuFrame);
+                        frameSubmittedToDetector = true;
+                        gpuFrame.download(screenshotCpu);
+                    }
+                }
+            }
+#endif
+
+            if (!frameSubmittedToDetector)
             {
                 std::lock_guard<std::mutex> lock(capturerMutex);
                 screenshotCpu = capturer->GetNextFrameCpu();
@@ -215,7 +244,7 @@ void captureThread(int CAPTURE_WIDTH, int CAPTURE_HEIGHT)
                 dml_detector->processFrame(screenshotCpu);
             }
 #ifdef USE_CUDA
-            else if (config.backend == "TRT")
+            else if (config.backend == "TRT" && !frameSubmittedToDetector)
             {
                 trt_detector.processFrame(screenshotCpu);
             }

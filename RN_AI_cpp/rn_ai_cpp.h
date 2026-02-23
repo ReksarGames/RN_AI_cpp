@@ -26,8 +26,13 @@ extern MouseThread* globalMouseThread;
 extern SerialConnection* arduinoSerial;
 extern KmboxConnection* kmboxSerial;
 extern KmboxNetConnection* kmboxNetSerial;
-extern MakcuConnection* makcu;
+extern MakcuConnection* makcu_conn;
 extern ColorDetector* color_detector;
+
+// Backward-compatible alias for legacy code paths that still reference `makcu`.
+#ifndef makcu
+#define makcu makcu_conn
+#endif
 
 extern std::atomic<bool> input_method_changed;
 extern std::atomic<bool> aiming;

@@ -37,6 +37,9 @@
     <ClCompile Include="mouse\kmbox_net\kmboxNet.cpp" />
     <ClCompile Include="mouse\kmboxNetConnection.cpp" />
     <ClCompile Include="mouse\MakcuConnection.cpp" />
+    <ClCompile Include="modules\makcu\src\makcu.cpp" />
+    <ClCompile Include="modules\makcu\src\makcu_c.cpp" />
+    <ClCompile Include="modules\makcu\src\serialport.cpp" />
     <ClCompile Include="detector\trt_detector.cpp" />
     <ClCompile Include="detector\color_detector.cpp" />
   </ItemGroup>
@@ -84,6 +87,9 @@
     <ClInclude Include="mouse\kmbox_net\picture.h" />
     <ClInclude Include="mouse\kmboxNetConnection.h" />
     <ClInclude Include="mouse\MakcuConnection.h" />
+    <ClInclude Include="modules\makcu\include\makcu.h" />
+    <ClInclude Include="modules\makcu\include\makcu_c.h" />
+    <ClInclude Include="modules\makcu\include\serialport.h" />
     <ClInclude Include="detector\fused_preprocess.h" />
     <ClInclude Include="detector\trt_detector.h" />
     <ClInclude Include="detector\color_detector.h" />

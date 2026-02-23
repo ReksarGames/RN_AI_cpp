@@ -45,10 +45,10 @@ bool prevRightArrow = false;
 
 bool isAnyKeyPressed(const std::vector<std::string>& keys)
 {
-    const bool usePhysicalDevice =
+    bool usePhysicalDevice =
         (kmboxNetSerial && kmboxNetSerial->isOpen()) ||
         (kmboxSerial && kmboxSerial->isOpen()) ||
-        (makcu && makcu->isOpen()) ||
+        (makcu_conn && makcu_conn->isOpen()) ||
         (config.arduino_enable_keys && arduinoSerial && arduinoSerial->isOpen());
 
     for (const auto& key_name : keys)
@@ -78,13 +78,13 @@ bool isAnyKeyPressed(const std::vector<std::string>& keys)
         }
 
         // makcu button monitor
-        if (!pressed && makcu && makcu->isOpen())
+        if (!pressed && makcu_conn && makcu_conn->isOpen())
         {
-            if  (key_name == "LeftMouseButton")      pressed = makcu->left_active;
-            else if(key_name == "RightMouseButton")  pressed = makcu->right_active;
-            else if(key_name == "MiddleMouseButton") pressed = makcu->middle_active;
-            else if(key_name == "X1MouseButton")     pressed = makcu->side1_active;
-            else if(key_name == "X2MouseButton")     pressed = makcu->side2_active;
+            if  (key_name == "LeftMouseButton")      pressed = makcu_conn->left_active;
+            else if(key_name == "RightMouseButton")  pressed = makcu_conn->right_active;
+            else if(key_name == "MiddleMouseButton") pressed = makcu_conn->middle_active;
+            else if(key_name == "X1MouseButton")     pressed = makcu_conn->side1_active;
+            else if(key_name == "X2MouseButton")     pressed = makcu_conn->side2_active;
         }
 
         // arduino button monitor
