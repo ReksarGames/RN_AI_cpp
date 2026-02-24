@@ -8,7 +8,7 @@
 ![CUDA](https://img.shields.io/badge/CUDA-12.8-76B900?style=for-the-badge)
 ![TensorRT](https://img.shields.io/badge/TensorRT-10.8-76B900?style=for-the-badge)
 
-[🚀 Quick Start](#-quick-start) • [📚 Documentation](#-technical-details) * [📚Русская версия README](README_RU.md)
+[🚀 Quick Start](#-quick-start) • [📚 Documentation](#-technical-details) * [📚Русская версия README](docs/README_RU.md)
 
 
 ![RN_AI Demo](docs/demo.gif)
