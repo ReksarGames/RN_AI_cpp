@@ -6,7 +6,7 @@
 
 Follow the instructions on the screenshot:
 
-<img src="gaming.JPG" width="400" alt="Gaming PC Setup">
+<img src="gaming.jpg" width="400" alt="Gaming PC Setup">
 
 In the **file path or url** parameters, specify the IP address of the second PC where our bot is located.
 
@@ -20,4 +20,4 @@ In the **file path or url** parameters, specify the IP address of the second PC 
 
 Set the IP address as shown on the screenshot:
 
-<img src="second.JPG" width="400" alt="Main PC Setup">
+<img src="second.jpg" width="400" alt="Main PC Setup">
