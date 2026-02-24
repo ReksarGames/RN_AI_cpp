@@ -1,0 +1,23 @@
+[Mouse] Using default Win32 method input.
+[Detector] Loading engine: models/sunxds_0.5.6.engine
+[TensorRT] The engine was successfully loaded from the file: models/sunxds_0.5.6.engine
+[Detector] Detected input: images
+[Detector] Detected output: output0
+[Detector] Allocated 4915200 bytes for input images
+[Detector] Allocated 7200 bytes for output output0
+
+
+Aimbot is started!
+RightMouseButton -> Targeting
+F2 -> Exit
+F3 -> Pause Aiming
+F4 -> Reload Config
+Home -> Overlay (OPTIONS)
+[Capture] OpenCV version: 4.10.0
+[Capture] Using Duplication API
+[Detector] Loading engine: models/sunxds_0.5.6.engine
+[TensorRT] The engine was successfully loaded from the file: models/sunxds_0.5.6.engine
+[Detector] Detected input: images
+[Detector] Detected output: output0
+[Detector] Allocated 4915200 bytes for input images
+[Detector] Allocated 7200 bytes for output output0

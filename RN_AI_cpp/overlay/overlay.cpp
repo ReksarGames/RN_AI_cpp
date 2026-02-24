@@ -1,4 +1,4 @@
-#define WIN32_LEAN_AND_MEAN
+﻿#define WIN32_LEAN_AND_MEAN
 #define _WINSOCKAPI_
 #include <winsock2.h>
 #include <Windows.h>
@@ -564,7 +564,7 @@ void OverlayThread()
                     "right_panel",
                     ImVec2(0, 0),
                     false,
-                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                    ImGuiWindowFlags_None);
                 switch (selected_tab)
                 {
                 case 0: draw_capture_settings(); break;
@@ -689,3 +689,4 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
     overlay.join();
     return 0;
 }
+

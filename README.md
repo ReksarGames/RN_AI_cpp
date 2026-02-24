@@ -1,383 +1,229 @@
-## 🛠️ Main Changes in This Version
+# 🎯 RN_AI_cpp — AI Aim Assistant
 
-1. **HID Methods Implementation**  
-   Added two methods to improve system accuracy and speed.  
-2. **Makcu Method**  
-   Improvements to game movement handling and control.  
-3. **Kalman Filter**  
-   Increased accuracy of target movement prediction.  
-4. **Aiming Smoothness**  
-   Reduced jitter, improving user experience.  
-5. **Performance**  
-   Optimized processes for higher performance on supported devices.  
-6. **Code Cleanup**  
-   Applied SOLID principles to improve code structure and maintainability.
+<div align="center">
 
----
+![Status](https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue?style=for-the-badge)
+![CUDA](https://img.shields.io/badge/CUDA-12.8-76B900?style=for-the-badge)
+![TensorRT](https://img.shields.io/badge/TensorRT-10.8-76B900?style=for-the-badge)
 
-## 🟣 New Configurations and Features
-
-### 🎨 Colorbot — Color Detection Parameters
-
-* **color_erode_iter:** number of erosion iterations — reduces image noise by removing small artifacts.  
-* **color_dilate_iter:** number of dilation iterations — enlarges objects after erosion, restoring target shape.  
-* **color_min_area:** minimum object area for detection — ignores very small regions (noise).  
-* **color_target:** target color for tracking (e.g., Yellow).  
-* **tinyArea:** minimum "point" to filter small elements — helps remove noise not related to the target.  
-* **isOnlyTop:** consider only top objects/layers (true/false) — useful for selecting the most visible target.  
-* **scanError:** allowed error in color scanning — reduces false positives.
-
-💡 **Description:**  
-Colorbot improves target detection by color, filtering noise and keeping accuracy on top objects. Perfect for highlighting specific targets on screen.
-
----
-
-### 🎯 Kalman Filter — Target Movement Prediction
-
-💡 **Description:**  
-The Kalman filter smooths target movement and predicts its future position. This reduces jitter during aiming and improves shooting accuracy.
-
-**Parameter Purpose:**
-
-* **kalman_process_noise:** accounts for random changes in target movement (process noise).  
-* **kalman_measurement_noise:** accounts for measurement inaccuracies (sensor or camera noise).  
-* **kalman_speed_multiplier_x / kalman_speed_multiplier_y:** scales prediction speed horizontally and vertically.  
-* **resetThreshold:** threshold above which the filter resets and starts tracking the target anew.
-
----
-
-### 🖥️ HID — Device Connection
-
-* **hid_vid:** `0x1956`  
-* **hid_pid:** `0x3001`  
-* **PING_CODE:** `0xF9`  
-
-💡 **Description:**  
-HID configuration allows direct connection to specific boards for controlling the system. Use these parameters for connecting an Arduino Leonardo.
-
----
-
-### ⚠️ Important Changes
-
-* Removed methods that are already detected automatically: **Arduino**, **WIN32**, **HID**.  
-* These methods remained in the code but are no longer needed, as they are detected automatically.  
-* If necessary, you can re-enable them depending on your firmware and hardware.
+[🚀 Quick Start](#-quick-start) • [📚 Documentation](#-technical-details) * [📚Русская версия README](README_RU.md)
 
 
-[![C++](https://img.shields.io/badge/C%2B%2B-17-blue)](https://github.com/SunOner/sunone_aimbot_cpp)
-[![License MIT](https://badgen.net/github/license/SunOner/sunone_aimbot_cpp)](https://github.com/SunOner/sunone_aimbot_cpp/blob/main/LICENSE)
-  <p>
-    <a href="https://github.com/SunOner/sunone_aimbot_cpp/releases" target="_blank">
-      <img width="75%" src="https://github.com/SunOner/sunone_aimbot/blob/main/media/one.gif">
-    </a>
-  </p>
+![RN_AI Demo](docs/demo.gif)
+
 </div>
 
-### 🟢 DirectML (DML) Build — Universal (All GPUs)
+---
 
-* **Works on:**
+## ✨ Features
 
-  * Any modern GPU (NVIDIA, AMD, Intel, including integrated graphics)
-  * Windows 10/11 (x64)
-  * No need for CUDA or special drivers!
-* **Recommended for:**
-
-  * GTX 10xx/9xx/7xx series (old NVIDIA)
-  * Any AMD Radeon or Intel Iris/Xe GPU
-  * Laptops and office PCs with integrated graphics
-* **Download DML build:**
-  [DirectML Release](https://disk.yandex.ru/d/9mf8VwfN0cK96w)
-
-### 🟡 CUDA + TensorRT Build — High Performance (NVIDIA Only)
-
-* **Works on:**
-
-  * NVIDIA GPUs **GTX 1660, RTX 2000/3000/4000 or newer**
-  * **Requires:** CUDA 12.8, TensorRT 10.8 (included in build)
-  * Windows 10/11 (x64)
-* **Not supported:** GTX 10xx/Pascal and older (TensorRT 10 limitation)
-* **Includes both CUDA+TensorRT and DML support (switchable in settings)**
-* **Download CUDA build:**
-  [CUDA + TensorRT Release](https://disk.yandex.ru/d/VjyDyWLbv7AUHQ)
-
-**Both versions are ready-to-use: just download, unpack, run `ai.exe` and follow instructions in the overlay.**
+| | |
+|---|---|
+| **🎯 AI Detection** | Target detection using neural networks with high accuracy |
+| **🎨 Color Detection** | Target identification through color-based filtering |
+| **📈 Real-time Stats** | FPS counter and latency information |
+| **🖱️ Aim Simulator** | Visualization of target movement prediction |
+| **🎛️ ClassTable** | Real-time dynamic class management |
+| **🔄 Kalman Filter** | Smooth movement without aim jitter |
+| **⚡ Multiple Backends** | DirectML, CUDA+TensorRT, Color Detection |
 
 ---
 
-## 🚀 How to Run (For Precompiled Builds)
+## 🚀 Quick Start
 
-1. **Download and unpack your chosen version (see links above).**
-2. For CUDA build, install [CUDA 12.8](https://developer.nvidia.com/cuda-12-8-0-download-archive) if not already installed.
-3. For DML build, no extra software is needed.
-4. **Run `ai.exe`.**
-   On first launch, the model will be exported (may take up to 5 minutes).
-5. Place your `.onnx` model in the `models` folder and select it in the overlay (HOME key).
-6. All settings are available in the overlay.
-   Use the HOME key to open/close overlay.
+### 1️⃣ Choose Your Build
 
-### 🎮 Controls
+<details open>
+<summary><b>🟢 DirectML (Universal)</b></summary>
 
-* **Right Mouse Button:** Aim at the detected target
-* **F2:** Exit
-* **F3:** Pause aiming
-* **F4:** Reload config
-* **Home:** Open/close overlay and settings
-
----
-
-# 🛠️ Build From Source (Advanced Users)
-
-If you want to compile the project yourself or modify code, follow these instructions.
-
-## 1. Requirements
-
-* **Visual Studio 2022 Community** ([Download](https://visualstudio.microsoft.com/vs/community/))
-* **Windows 10 or 11 (x64)**
-* **Windows SDK 10.0.26100.0** or newer
-* **CMake** ([Download](https://cmake.org/))
-* **OpenCV 4.10.0**
-* **\[For CUDA version]**
-
-  * [CUDA Toolkit 12.8](https://developer.nvidia.com/cuda-12-8-0-download-archive)
-  * [cuDNN 9.7.1](https://developer.nvidia.com/cudnn-downloads)
-  * [TensorRT 10.8.0.43](https://developer.nvidia.com/tensorrt/download/10x)
-* **\[For DML version]**
-
-  * You can use [pre-built OpenCV DLLs](https://github.com/opencv/opencv/releases/tag/4.10.0) (just copy `opencv_world4100.dll` to your exe folder)
-* Other dependencies:
-
-  * [simpleIni](https://github.com/brofield/simpleini/blob/master/SimpleIni.h)
-  * [serial](https://github.com/wjwwood/serial)
-  * [GLFW](https://www.glfw.org/download.html)
-  * [ImGui](https://github.com/ocornut/imgui)
-
----
-
-## 2. Choose Build Target in Visual Studio
-
-* **DML (DirectML):**
-  Select `Release | x64 | DML` (works on any modern GPU)
-* **CUDA (TensorRT):**
-  Select `Release | x64 | CUDA` (requires supported NVIDIA GPU, see above)
-
----
-
-## 3. Placement of Third-Party Modules and Libraries
-
-Before building the project, **download and place all third-party dependencies** in the following directories inside your project structure:
-
-**Required folders inside your repository:**
+**For:** Any GPU (NVIDIA, AMD, Intel, integrated graphics)
 
 ```
-sunone_aimbot_cpp/
-└── sunone_aimbot_cpp/
-    └── modules/
+✅ Windows 10/11 (x64)
+✅ No CUDA required
+✅ Recommended for older GPUs
 ```
 
-**Place each dependency as follows:**
+**Recommended for:**
+- GTX 10xx/9xx/7xx series
+- AMD Radeon GPU
+- Intel Iris/Xe GPU
+- Laptops and office PCs
 
-| Library   | Path                                                              |
-| --------- | ----------------------------------------------------------------- |
-| SimpleIni | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/SimpleIni.h`         |
-| serial    | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/serial/`             |
-| TensorRT  | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/TensorRT-10.8.0.43/` |
-| GLFW      | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/glfw-3.4.bin.WIN64/` |
-| OpenCV    | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/`             |
-| cuDNN     | `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn/`              |
+</details>
 
-* **SimpleIni:**
-  Download [`SimpleIni.h`](https://github.com/brofield/simpleini/blob/master/SimpleIni.h)
-  Place in `modules/`.
+<details>
+<summary><b>🟡 CUDA + TensorRT (Maximum Performance)</b></summary>
 
-* **serial:**
-  Download the [`serial`](https://github.com/wjwwood/serial) library (whole folder).
-  To build, open
-
-  ```
-  sunone_aimbot_cpp/sunone_aimbot_cpp/modules/serial/visual_studio/visual_studio.sln
-  ```
-
-  * Set **C/C++ > Code Generation > Runtime Library** to **Multi-threaded (/MT)**
-  * Build in **Release x64**
-  * Use the built DLL/LIB with your project.
-
-* **TensorRT:**
-  Download [TensorRT 10.8.0.43](https://developer.nvidia.com/tensorrt/download/10x)
-  Place the folder as shown above.
-
-* **GLFW:**
-  Download [GLFW Windows binaries](https://www.glfw.org/download.html)
-  Place the folder as shown above.
-
-* **OpenCV:**
-  Use your custom build or official DLLs (see CUDA/DML notes below).
-  Place DLLs either next to your exe or in `modules/opencv/`.
-
-* **cuDNN:**
-  Place cuDNN files here (for CUDA build):
-  `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn/`
-
-**Example structure after setup:**
+**For:** Latest generation NVIDIA GPUs
 
 ```
-sunone_aimbot_cpp/
-└── sunone_aimbot_cpp/
-    └── modules/
-        ├── SimpleIni.h
-        ├── serial/
-        ├── TensorRT-10.8.0.43/
-        ├── glfw-3.4.bin.WIN64/
-        ├── opencv/
-        └── cudnn/
+✅ RTX 2000/3000/4000 and newer
+✅ GTX 1660
+✅ CUDA 12.8 + TensorRT 10.8 (included)
+❌ Does not support GTX 10xx/Pascal and older
 ```
 
----
+**Features:**
+- Switch between CUDA+TensorRT and DML in settings
+- Maximum FPS and accuracy
+- Professional-grade performance
 
-## 4. How to Build OpenCV 4.10.0 with CUDA Support (For CUDA Version Only)
-
-> This section is **only required** if you want to use the CUDA (TensorRT) version and need OpenCV with CUDA support.
-> For DML build, skip this step — you can use the pre-built OpenCV DLL.
-
-**Step-by-step instructions:**
-
-1. **Download Sources**
-
-   * [OpenCV 4.10.0](https://github.com/opencv/opencv/releases/tag/4.10.0)
-   * [OpenCV Contrib 4.10.0](https://github.com/opencv/opencv_contrib/releases/tag/4.10.0)
-   * [CMake](https://cmake.org/download/)
-   * [CUDA Toolkit 12.8](https://developer.nvidia.com/cuda-12-8-0-download-archive)
-   * [cuDNN 9.7.1](https://developer.nvidia.com/cudnn-downloads)
-
-2. **Prepare Directories**
-
-   * Create:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/`
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build`
-   * Extract `opencv-4.10.0` into
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/opencv-4.10.0`
-   * Extract `opencv_contrib-4.10.0` into
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/opencv_contrib-4.10.0`
-   * Extract cuDNN to
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn`
-
-3. **Configure with CMake**
-
-   * Open CMake GUI
-   * Source code:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/opencv-4.10.0`
-   * Build directory:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build`
-   * Click **Configure**
-     (Choose "Visual Studio 17 2022", x64)
-
-4. **Enable CUDA Options**
-
-   * After first configure, set the following:
-
-     * `WITH_CUDA` = ON
-     * `WITH_CUBLAS` = ON
-     * `ENABLE_FAST_MATH` = ON
-     * `CUDA_FAST_MATH` = ON
-     * `WITH_CUDNN` = ON
-     * `CUDNN_LIBRARY` =
-       `full_path_to/sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn/lib/x64/cudnn.lib`
-     * `CUDNN_INCLUDE_DIR` =
-       `full_path_to/sunone_aimbot_cpp/sunone_aimbot_cpp/modules/cudnn/include`
-     * `CUDA_ARCH_BIN` =
-       See [CUDA Wikipedia](https://en.wikipedia.org/wiki/CUDA) for your GPU.
-       Example for RTX 3080-Ti: `8.6`
-     * `OPENCV_DNN_CUDA` = ON
-     * `OPENCV_EXTRA_MODULES_PATH` =
-       `full_path_to/sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/opencv_contrib-4.10.0/modules`
-     * `BUILD_opencv_world` = ON
-   * Uncheck:
-
-     * `WITH_NVCUVENC`
-     * `WITH_NVCUVID`
-   * Click **Configure** again
-     (make sure nothing is reset)
-   * Click **Generate**
-
-5. **Build in Visual Studio**
-
-   * Open `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build/OpenCV.sln`
-     or click "Open Project" in CMake
-   * Set build config: **x64 | Release**
-   * Build `ALL_BUILD` target (can take up to 2 hours)
-   * Then build `INSTALL` target
-
-6. **Copy Resulting DLLs**
-
-   * DLLs:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build/install/x64/vc16/bin/`
-   * LIBs:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build/install/x64/vc16/lib/`
-   * Includes:
-     `sunone_aimbot_cpp/sunone_aimbot_cpp/modules/opencv/build/install/include/opencv2`
-   * Copy needed DLLs (`opencv_world4100.dll`, etc.) next to your project’s executable.
+</details>
 
 ---
 
-## 5. Notes on OpenCV for CUDA/DML
+## ⚙️ Configuration & Parameters
 
-* **For CUDA build (TensorRT backend):**
+### 📦 ClassTable — Class Management
 
-  * You **must** build OpenCV with CUDA support (see the guide above).
-  * Place all built DLLs (e.g., `opencv_world4100.dll`) next to your executable or in the `modules` folder.
-* **For DML build (DirectML backend):**
-
-  * You can use the official pre-built OpenCV DLLs if you **only** plan to use DirectML.
-  * If you want to use both CUDA and DML modes in the same executable, you should always use your custom OpenCV build with CUDA enabled (it will work for both modes).
-* **Note:**
-  If you run the CUDA backend with non-CUDA OpenCV DLLs, the program will not work and may crash due to missing symbols.
+Dynamic management of target classes with:
+- ✅ Add/switch classes in real-time
+- ✅ Auto-detection of new classes
+- ✅ Configure Y1/Y2 position for each class
 
 ---
 
-## 6. Build and Run
+### 🎨 Colorbot — Color Detection
 
-1. Open the solution in Visual Studio 2022.
-2. Choose your configuration (`Release | x64 | DML` or `Release | x64 | CUDA`).
-3. Build the solution.
-4. Run `ai.exe` from the output folder.
+Advanced color filtering system:
 
----
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `color_erode_iter` | 0-5 | Number of erosion iterations (reduces noise) |
+| `color_dilate_iter` | 0-5 | Number of dilation iterations (restores size) |
+| `color_min_area` | 1-1000 | Minimum object area |
+| `color_target` | Yellow/Red/etc | Target color for tracking |
+| `tinyArea` | 1-100 | Small element filtering threshold |
+| `isOnlyTop` | true/false | Consider only top objects |
+| `scanError` | 0-100 | Allowed search error (0=precise) |
 
-## 🔄 Exporting AI Models
-
-* Convert PyTorch `.pt` models to ONNX:
-
-  ```bash
-  pip install ultralytics -U
-  yolo export model=sunxds_0.5.6.pt format=onnx dynamic=true simplify=true
-  ```
-* To convert `.onnx` to `.engine` for TensorRT, use the overlay export tab (open overlay with HOME).
-
-## 📋 Configuration
-
-* See all configuration options and documentation here:
-  [config\_cpp.md](https://github.com/SunOner/sunone_aimbot_docs/blob/main/config/config_cpp.md)
+**💡 Use:** Accurate color-based target selection while ignoring noise
 
 ---
 
-## 📚 References & Useful Links
+### 🎯 Kalman Filter — Movement Prediction
 
-* [TensorRT Documentation](https://docs.nvidia.com/deeplearning/tensorrt/)
-* [OpenCV Documentation](https://docs.opencv.org/4.x/d1/dfb/intro.html)
-* [ImGui](https://github.com/ocornut/imgui)
-* [CppWinRT](https://github.com/microsoft/cppwinrt)
-* [GLFW](https://www.glfw.org/)
-* [WindMouse](https://ben.land/post/2021/04/25/windmouse-human-mouse-movement/)
-* [KMBOX](https://www.kmbox.top/)
-* [Python AI Version](https://github.com/SunOner/sunone_aimbot)
+Smoothing filter for target position prediction:
+
+| Parameter | Description |
+|-----------|-------------|
+| `kalman_process_noise` | Accounts for random movement changes |
+| `kalman_measurement_noise` | Accounts for sensor/camera errors |
+| `kalman_speed_multiplier_x/y` | Speed multiplier per axis |
+| `resetThreshold` | Filter reinitialization threshold |
+
+**💡 Result:** Smooth aiming without jitter
 
 ---
 
-## 📄 Licenses
+## 🖥️ Interface & Controls
 
-### OpenCV
+### 🎨 ImGui Menu
 
-* **License:** [Apache License 2.0](https://opencv.org/license.html)
+**Menu interface features:**
 
-### ImGui
+- 🧭 Vertical navbar with custom icons
+- 🖼️ Custom background via `ui_bg.png`
+- 🎨 Theming in `ui_theme.ini`
+- ⚙️ `Components` tab for runtime configuration
 
-* **License:** [MIT License](https://github.com/ocornut/imgui/blob/master/LICENSE)
+#### 📸 Interface Screenshots
+
+| Screen Capture | Target Status |
+|---|---|
+| ![Capture](docs\menu\сapture.jpg) | ![Status](docs\menu\status.jpg) |
+
+#### 🎛️ Overlay Controls
+
+- **Overlay Opacity** — Transparency (slider or ±)
+- **UI Scale** — Interface scale (± or manual input)
+- **Window Width/Height** — Window size (manual input)
+- **Resize Handles** — Resize window from edges
+
+### 🎮 Game Overlay — On-Screen Visualization
+
+Information displayed directly on desktop over games and apps:
+
+- 📊 **Stats** — FPS counter and latency info
+- 🎯 **Aim Simulator** — Aiming prediction visualization
+- 🔲 **Detection Boxes** — Detected target boxes
+- 🎨 **Class Colors** — Auto-coloring (class 0 = green)
+- 📝 **Text Size** — Adjustable in Components → Advanced
+
+---
+
+## 🔧 Technical Details
+
+### 📁 File Structure
+
+| File | Purpose |
+|------|---------|
+| **config.ini** | Main project configuration |
+| **ui_theme.ini** | UI colors, sizes, and parameters |
+| **ui_bg.png** | Menu background image (replaceable) |
+| **imgui.ini** | Window state (local, not committed) |
+
+### 📦 Core Modules
+
+📹 **capture/** — Screen capture methods
+- DirectX Duplication API — `duplication_api_capture`
+- Windows Runtime capture — `winrt_capture`
+- [📖 OBS Capture](docs/obs/obs_en.md) — `obs_capture`
+
+🧠 **detector/** — Target detection system
+- DirectML detector — `dml_detector`
+- TensorRT detector (NVIDIA) — `trt_detector`
+- Color-based detection — `color_detector`
+
+🎨 **overlay/** — Visual interface
+- ImGui implementation — `imgui_impl_*`
+- 2D/3D rendering — `rendering`
+
+### ⚡ Input Methods
+
+- **WIN32 API** — Built-in Windows APIs  
+  ⚠️ **Warning:** Don't use in games (instant detection)
+
+- **Makcu/Kmbox/KmboxNet** — Specialized input devices  
+  ✅ Recommended for games (low latency)
+
+---
+
+## 📚 Links & Resources
+
+### 📖 Documentation
+
+- 🔗 [TensorRT Docs](https://docs.nvidia.com/deeplearning/tensorrt/)
+- 🔗 [OpenCV Docs](https://docs.opencv.org/4.x/d1/dfb/intro.html)
+- 🔗 [CUDA 12.8](https://developer.nvidia.com/cuda-12-8-0-download-archive)
+- 🔗 [Config](docs\config_en.md)
+
+### 🛠️ Libraries Used
+
+| Library | Purpose |
+|---------|---------|
+| [ImGui](https://github.com/ocornut/imgui) | User Interface |
+| [OpenCV](https://opencv.org/) | Computer Vision |
+| [TensorRT](https://developer.nvidia.com/tensorrt) | Neural network inference (NVIDIA) |
+| [DirectML](https://github.com/microsoft/DirectML) | GPU computing (universal) |
+| [CppWinRT](https://github.com/microsoft/cppwinrt) | Windows Runtime APIs |
+| [GLFW](https://www.glfw.org/) | Window management |
+| [nlohmann/JSON](https://github.com/nlohmann/json) | JSON processing |
+
+### 💡 Methods & Inspiration
+
+- 🔗 [WindMouse Algorithm](https://ben.land/post/2021/04/25/windmouse-human-mouse-movement/) — Natural mouse movement
+- 🔗 [KMBOX](https://www.kmbox.top/) — Input device integration
+- 🐍 [RN_AI (Python version)](https://github.com/ReksarGames/RN_AI)
+- 🔀 [Original SunOne Aimbot](https://github.com/SunOner/sunone_aimbot_cpp) — RN_AI_cpp is a complete fork and rebuild
+
+---
+
+<div align="center">
+
+**Made with ❤️ for the gaming community**
+
+</div>
