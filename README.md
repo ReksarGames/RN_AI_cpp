@@ -134,7 +134,7 @@ Smoothing filter for target position prediction:
 
 | Screen Capture | Target Status |
 |---|---|
-| ![Capture](docs\menu\сapture.jpg) | ![Status](docs\menu\status.jpg) |
+| ![Capture](docs/menu/сapture.jpg) | ![Status](docs/menu/status.jpg) |
 
 #### 🎛️ Overlay Controls
 
