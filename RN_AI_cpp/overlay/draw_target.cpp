@@ -21,6 +21,9 @@
 
 #include "overlay.h"
 #include "draw_settings.h"
+#include "ui_sections.h"
+#include "ui_controls.h"
+#include "ui_runtime.h"
 #include "rn_ai_cpp.h"
 #include "other_tools.h"
 #include "memory_images.h"
@@ -188,83 +191,133 @@ void draw_target()
         changed = true;
     }
 
-    ImGui::SeparatorText("General");
-    if (ImGui::Checkbox("Disable Headshot", &config.disable_headshot))
-        changed = true;
-    int head_id = config.class_head;
-    ImGui::PushItemWidth(100.0f);
-    if (ImGui::InputInt("Head Class Id", &head_id))
+    if (OverlayUI::BeginCard("GENERAL TARGETING", "target_general_card"))
     {
-        config.class_head = std::max(0, head_id);
-        changed = true;
-    }
-    ImGui::PopItemWidth();
-    if (ImGui::Checkbox("Ignore Third Person", &config.ignore_third_person))
-        changed = true;
-    if (ImGui::Checkbox("Shooting range targets", &config.shooting_range_targets))
-        changed = true;
-    if (ImGui::Checkbox("Auto Aim", &config.auto_aim))
-        changed = true;
-
-    float max_scope_px = static_cast<float>(std::hypot(
-        static_cast<double>(config.detection_resolution),
-        static_cast<double>(config.detection_resolution))) / 2.0f;
-    float scope_percent = 0.0f;
-    if (config.aim_bot_scope > 0.0f && max_scope_px > 0.0f)
-        scope_percent = (config.aim_bot_scope / max_scope_px) * 100.0f;
-    scope_percent = std::clamp(scope_percent, 0.0f, 100.0f);
-    float scope_percent_edit = scope_percent;
-    if (ImGui::SliderFloat("Aim Scope (% of screen radius)", &scope_percent_edit, 0.0f, 100.0f, "%.0f%%"))
-    {
-        if (scope_percent_edit <= 0.0f || max_scope_px <= 0.0f)
-            config.aim_bot_scope = 0.0f;
-        else
-            config.aim_bot_scope = (scope_percent_edit / 100.0f) * max_scope_px;
-        changed = true;
-    }
-    ImGui::TextDisabled("100%% = whole screen (radius to corner). 0%% = auto.");
-    if (config.aim_bot_scope > 0.0f && max_scope_px > 0.0f)
-        ImGui::TextDisabled("Current: %.1f px (max %.1f px)", config.aim_bot_scope, max_scope_px);
-
-    ImGui::SeparatorText("Smart Target");
-    if (ImGui::Checkbox("Smart Target Lock", &config.smart_target_lock))
-    {
-        config.target_lock_enabled = config.smart_target_lock;
-        changed = true;
-    }
-    if (config.smart_target_lock)
-    {
-        if (ImGui::SliderFloat("Lock Distance", &config.target_lock_distance, 20.0f, 400.0f, "%.1f"))
+        if (ImGui::Checkbox("Disable Headshot Mode", &config.disable_headshot))
             changed = true;
-        if (ImGui::SliderFloat("Reacquire Time (s)", &config.target_lock_reacquire_time, 0.05f, 2.0f, "%.2f"))
+        if (OverlayUI::g_show_descriptions)
+            ImGui::TextDisabled("Aim for body center instead of head");
+
+        if (ImGui::Checkbox("Ignore Third Person", &config.ignore_third_person))
             changed = true;
-        ImGui::TextDisabled("Keeps lock for this time after target disappears.");
-        float switch_delay_s = static_cast<float>(std::max(0, config.target_switch_delay)) / 1000.0f;
-        if (ImGui::SliderFloat("Target Switch Delay (s)", &switch_delay_s, 0.0f, 2.0f, "%.2f"))
+        if (OverlayUI::g_show_descriptions)
+            ImGui::TextDisabled("Don't aim at your own character in 3rd person view");
+
+        if (ImGui::Checkbox("Auto Aim Active", &config.auto_aim))
+            changed = true;
+
+        int head_id = config.class_head;
+        ImGui::TextUnformatted("Head Class Id");
+        ImGui::SetNextItemWidth((std::min)(220.0f, ImGui::GetContentRegionAvail().x));
+        if (ImGui::InputInt("##head_class_id", &head_id, 0, 0))
         {
-            config.target_switch_delay = static_cast<int>(switch_delay_s * 1000.0f + 0.5f);
+            config.class_head = std::max(0, head_id);
             changed = true;
         }
-        ImGui::TextDisabled("Wait time before switching when target count changes.");
 
-        if (ImGui::CollapsingHeader("Smart Target Advanced"))
+        float max_scope_px = static_cast<float>(std::hypot(
+            static_cast<double>(config.detection_resolution),
+            static_cast<double>(config.detection_resolution))) / 2.0f;
+        float scope_percent = 0.0f;
+        if (config.aim_bot_scope > 0.0f && max_scope_px > 0.0f)
+            scope_percent = (config.aim_bot_scope / max_scope_px) * 100.0f;
+        scope_percent = std::clamp(scope_percent, 0.0f, 100.0f);
+        float scope_percent_edit = scope_percent;
+        if (OverlayUI::FloatControlRow(
+            "Aim Scope Radius",
+            &scope_percent_edit,
+            0.0f,
+            100.0f,
+            1.0f,
+            "%.0f",
+            "%.1f",
+            "%",
+            "% of screen radius to search for targets"))
         {
-            if (ImGui::InputInt("Target Reference Class", &config.target_reference_class))
-                changed = true;
-            if (ImGui::InputInt("Target Lock Fallback Class (-1 = off)", &config.target_lock_fallback_class))
-                changed = true;
+            if (scope_percent_edit <= 0.0f || max_scope_px <= 0.0f)
+                config.aim_bot_scope = 0.0f;
+            else
+                config.aim_bot_scope = (scope_percent_edit / 100.0f) * max_scope_px;
+            changed = true;
         }
     }
+    OverlayUI::EndCard();
 
-    if (ImGui::CollapsingHeader("Smart Target Weights"))
+    if (OverlayUI::BeginCard("SMART TARGET LOCK", "target_lock_card"))
     {
-        if (ImGui::SliderFloat("Distance Weight", &config.distance_scoring_weight, 0.0f, 2.0f, "%.2f"))
+        if (ImGui::Checkbox("Enable Smart Target Lock", &config.smart_target_lock))
+        {
+            config.target_lock_enabled = config.smart_target_lock;
             changed = true;
-        if (ImGui::SliderFloat("Center Weight", &config.center_scoring_weight, 0.0f, 2.0f, "%.2f"))
+        }
+        if (config.smart_target_lock)
+        {
+            if (OverlayUI::FloatControlRow(
+                "Lock Distance",
+                &config.target_lock_distance,
+                20.0f,
+                400.0f,
+                1.0f,
+                "%.0f",
+                "%.1f",
+                "px",
+                "Max pixel distance to maintain lock on current target"))
+                changed = true;
+
+            float reacquire_ms = config.target_lock_reacquire_time * 1000.0f;
+            if (OverlayUI::FloatControlRow(
+                "Reacquire Time",
+                &reacquire_ms,
+                50.0f,
+                2000.0f,
+                10.0f,
+                "%.0f",
+                "%.0f",
+                "ms",
+                "Time before searching for new target after losing current"))
+            {
+                config.target_lock_reacquire_time = reacquire_ms / 1000.0f;
+                changed = true;
+            }
+
+            float switch_delay_ms = static_cast<float>(std::max(0, config.target_switch_delay));
+            if (OverlayUI::FloatControlRow(
+                "Target Switch Delay",
+                &switch_delay_ms,
+                0.0f,
+                2000.0f,
+                10.0f,
+                "%.0f",
+                "%.0f",
+                "ms",
+                "Debounce time before switching to different target"))
+            {
+                config.target_switch_delay = static_cast<int>(switch_delay_ms + 0.5f);
+                changed = true;
+            }
+        }
+    }
+    OverlayUI::EndCard();
+
+    if (ImGui::CollapsingHeader("ADVANCED CLASS CONTROLS"))
+    {
+        ImGui::SetNextItemWidth((std::min)(120.0f, ImGui::GetContentRegionAvail().x));
+        if (ImGui::InputInt("Target Reference Class", &config.target_reference_class, 0, 0))
             changed = true;
-        if (ImGui::SliderFloat("Size Weight", &config.size_scoring_weight, 0.0f, 2.0f, "%.2f"))
+        ImGui::SetNextItemWidth((std::min)(120.0f, ImGui::GetContentRegionAvail().x));
+        if (ImGui::InputInt("Target Lock Fallback Class (-1 = off)", &config.target_lock_fallback_class, 0, 0))
             changed = true;
-        if (ImGui::SliderFloat("Tiebreak Ratio", &config.aim_weight_tiebreak_ratio, 0.0f, 1.0f, "%.2f"))
+    }
+
+    if (ImGui::CollapsingHeader("SMART TARGET WEIGHTS"))
+    {
+        if (OverlayUI::FloatControlRow("Distance Weight", &config.distance_scoring_weight, 0.0f, 2.0f, 0.01f, "%.2f", "%.3f"))
+            changed = true;
+        if (OverlayUI::FloatControlRow("Center Weight", &config.center_scoring_weight, 0.0f, 2.0f, 0.01f, "%.2f", "%.3f"))
+            changed = true;
+        if (OverlayUI::FloatControlRow("Size Weight", &config.size_scoring_weight, 0.0f, 2.0f, 0.01f, "%.2f", "%.3f"))
+            changed = true;
+        if (OverlayUI::FloatControlRow("Tiebreak Ratio", &config.aim_weight_tiebreak_ratio, 0.0f, 1.0f, 0.01f, "%.2f", "%.3f"))
             changed = true;
     }
 

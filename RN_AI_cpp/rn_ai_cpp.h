@@ -40,4 +40,6 @@ extern std::atomic<bool> shooting;
 extern std::atomic<bool> zooming;
 extern std::atomic<bool> triggerbot_button;
 
+void SetConsoleFileLoggingEnabled(bool enabled, bool clear_on_enable = false);
+
 #endif // RN_AI_CPP_H

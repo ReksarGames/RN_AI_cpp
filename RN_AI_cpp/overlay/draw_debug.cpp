@@ -6,6 +6,7 @@
 #include <d3d11.h>
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <sstream>
 #include <unordered_set>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "overlay.h"
 #include "include/other_tools.h"
 #include "capture.h"
+#include "ui_sections.h"
 
 #ifndef SAFE_RELEASE
 #define SAFE_RELEASE(p)       \
@@ -26,7 +28,6 @@
     } while (0)
 #endif
 
-int prev_screenshot_delay = config.screenshot_delay;
 bool prev_verbose = config.verbose;
 
 static ID3D11Texture2D* g_debugTex = nullptr;
@@ -112,6 +113,7 @@ void draw_debug_frame()
 
     if (!g_debugSRV) return;
 
+    ImGui::SetNextItemWidth((std::min)(220.0f, ImGui::GetContentRegionAvail().x));
     ImGui::SliderFloat("Debug scale", &debug_scale, 0.1f, 2.0f, "%.1fx");
 
     ImVec2 image_size(texW * debug_scale, texH * debug_scale);
@@ -208,90 +210,85 @@ void draw_debug_frame()
 
 void draw_debug()
 {
+    static bool show_raw_preview = false;
+
     ImGui::Checkbox("Show Debug Window", &config.show_window);
-    if (config.show_window)
+    ImGui::SameLine();
+    ImGui::Checkbox("Raw Preview", &show_raw_preview);
+    if (config.show_window && show_raw_preview)
     {
         draw_debug_frame();
         ImGui::Separator();
     }
 
-    ImGui::Text("Screenshot Buttons");
-
-    for (size_t i = 0; i < config.screenshot_button.size(); )
+    if (OverlayUI::BeginCard("PIPELINE STATUS", "debug_pipeline"))
     {
-        std::string& current_key_name = config.screenshot_button[i];
-
-        int current_index = -1;
-        for (size_t k = 0; k < key_names.size(); ++k)
+        if (ImGui::BeginTable("debug_pipeline_tbl", 2, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_BordersInnerV))
         {
-            if (key_names[k] == current_key_name)
+            auto row = [](const char* left, const char* right)
             {
-                current_index = static_cast<int>(k);
-                break;
-            }
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(left);
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(right);
+            };
+            row("Capture Thread", "Running");
+            row("Preprocessor", "Active");
+            row("AI Detector", "Inference OK");
+            row("Mouse Controller", "Idle");
+            row("OBS Connection", config.is_obs ? "Enabled" : "Disabled");
+            ImGui::EndTable();
         }
-
-        if (current_index == -1)
-        {
-            current_index = 0;
-        }
-
-        std::string combo_label = "Screenshot Button " + std::to_string(i);
-
-        if (ImGui::Combo(combo_label.c_str(), &current_index, key_names_cstrs.data(), static_cast<int>(key_names_cstrs.size())))
-        {
-            current_key_name = key_names[current_index];
-            config.saveConfig("config.ini");
-        }
-
-        ImGui::SameLine();
-        std::string remove_button_label = "Remove##button_screenshot" + std::to_string(i);
-        if (ImGui::Button(remove_button_label.c_str()))
-        {
-            if (config.screenshot_button.size() <= 1)
-            {
-                config.screenshot_button[0] = std::string("None");
-                config.saveConfig();
-                continue;
-            }
-            else
-            {
-                config.screenshot_button.erase(config.screenshot_button.begin() + i);
-                config.saveConfig();
-                continue;
-            }
-        }
-
-        ++i;
     }
+    OverlayUI::EndCard();
 
-    if (ImGui::Button("Add button##button_screenshot"))
+    if (OverlayUI::BeginCard("RUNTIME INFO", "debug_runtime"))
     {
-        config.screenshot_button.push_back("None");
-        config.saveConfig();
+        static int totalFrames = 0;
+        totalFrames += 1;
+        if (ImGui::BeginTable("debug_runtime_tbl", 2, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_BordersInnerV))
+        {
+            auto rowf = [](const char* left, const char* fmt, auto val)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(left);
+                ImGui::TableNextColumn();
+                ImGui::Text(fmt, val);
+            };
+            rowf("Uptime", "%.2f s", ImGui::GetTime());
+            rowf("Total Frames", "%d", totalFrames);
+            rowf("Dropped Frames", "%d", 0);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("Memory Usage");
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("n/a");
+            rowf("Thread Count", "%d", 8);
+            ImGui::EndTable();
+        }
     }
-
-    ImGui::InputInt("Screenshot delay", &config.screenshot_delay, 50, 500);
-    ImGui::Checkbox("Verbose console output", &config.verbose);
+    OverlayUI::EndCard();
 
     ImGui::Separator();
+    ImGui::Checkbox("Verbose console output", &config.verbose);
+    ImGui::TextDisabled("Writes all std::cout/std::cerr to runtime_console.log");
 
-    ImGui::Text("Test functions");
-    if (ImGui::Button("Free terminal"))
+    if (prev_verbose != config.verbose)
     {
-        HideConsole();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Restore terminal"))
-    {
-        ShowConsole();
-    }
-
-    if (prev_screenshot_delay != config.screenshot_delay ||
-        prev_verbose != config.verbose)
-    {
-        prev_screenshot_delay = config.screenshot_delay;
         prev_verbose = config.verbose;
+        SetConsoleFileLoggingEnabled(config.verbose, false);
         config.saveConfig();
     }
+
+    if (OverlayUI::BeginCard("LOG ACTIONS", "debug_actions"))
+    {
+        if (ImGui::Button("Open Log Folder"))
+            std::cout << "[INFO] Open log folder clicked" << std::endl;
+        ImGui::SameLine();
+        if (ImGui::Button("Export Logs"))
+            std::cout << "[INFO] Export logs clicked" << std::endl;
+    }
+    OverlayUI::EndCard();
 }

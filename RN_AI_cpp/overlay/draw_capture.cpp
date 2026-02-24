@@ -5,6 +5,7 @@
 
 #include <string.h>
 #include <algorithm>
+#include <cstdlib>
 
 #include <imgui/imgui.h>
 #include "imgui/imgui_internal.h"
@@ -18,6 +19,8 @@
 #include "overlay.h"
 #include "ui_sections.h"
 #include "config_dirty.h"
+#include "ui_controls.h"
+#include "ui_runtime.h"
 
 bool disable_winrt_futures = checkwin1903();
 int monitors = get_active_monitors();
@@ -36,15 +39,9 @@ void ensureVirtualCamerasLoaded() {
 void draw_capture_settings()
 {
     static const int allowed_resolutions[] = { 220, 320, 640 };
-    static int current_resolution_idx = 1;
     static int winrt_source_mode = 0; // 0 = monitor, 1 = window title (preview UI)
     static char winrt_window_title_buf[128] = "";
-
-    for (int i = 0; i < 3; ++i)
-        if (config.detection_resolution == allowed_resolutions[i])
-            current_resolution_idx = i;
-
-    if (OverlayUI::BeginSection("Core", "capture_core"))
+    if (OverlayUI::BeginCard("GENERAL CAPTURE SETTINGS", "capture_core_card"))
     {
         std::vector<std::string> captureMethodOptions = { "duplication_api", "winrt", "virtual_camera", "obs" };
         std::vector<const char*> captureMethodItems;
@@ -63,57 +60,74 @@ void draw_capture_settings()
             }
         }
 
-        OverlayUI::AdaptiveItemWidth();
-        if (ImGui::Combo("Capture method", &currentcaptureMethodIndex, captureMethodItems.data(), static_cast<int>(captureMethodItems.size())))
+        int current_resolution_idx = 1;
+        for (int i = 0; i < 3; ++i)
+            if (config.detection_resolution == allowed_resolutions[i])
+                current_resolution_idx = i;
+        OverlayUI::AdaptiveItemWidth(1.0f, 220.0f, 560.0f);
+        if (ImGui::Combo("Detection Resolution", &current_resolution_idx, "220\0""320\0""640\0"))
+        {
+            const int chosen = allowed_resolutions[current_resolution_idx];
+            if (chosen != config.detection_resolution)
+            {
+                config.detection_resolution = chosen;
+                detection_resolution_changed.store(true);
+                detector_model_changed.store(true);
+
+                globalMouseThread->updateConfig(
+                    config.detection_resolution,
+                    config.fovX,
+                    config.fovY,
+                    config.minSpeedMultiplier,
+                    config.maxSpeedMultiplier,
+                    config.predictionInterval,
+                    config.auto_shoot,
+                    config.bScope_multiplier,
+                    config.triggerbot_bScope_multiplier);
+                OverlayConfig_MarkDirty();
+            }
+        }
+        if (OverlayUI::g_show_descriptions)
+            ImGui::TextDisabled("Input size for AI model - higher = more accurate but slower");
+
+        ImGui::TextUnformatted("Capture Method");
+        OverlayUI::AdaptiveItemWidth(1.0f, 220.0f, 560.0f);
+        if (ImGui::Combo("##capture_method_combo", &currentcaptureMethodIndex, captureMethodItems.data(), static_cast<int>(captureMethodItems.size())))
         {
             config.capture_method = captureMethodOptions[currentcaptureMethodIndex];
             capture_method_changed.store(true);
             OverlayConfig_MarkDirty();
         }
+        if (OverlayUI::g_show_descriptions)
+            ImGui::TextDisabled("duplication_api / winrt / virtual_camera / obs");
 
-        OverlayUI::AdaptiveItemWidth();
-        if (ImGui::Combo("Detection Resolution", &current_resolution_idx, "220\0""320\0""640\0"))
-        {
-            config.detection_resolution = allowed_resolutions[current_resolution_idx];
-            detection_resolution_changed.store(true);
-            detector_model_changed.store(true);
-
-            globalMouseThread->updateConfig(
-                config.detection_resolution,
-                config.fovX,
-                config.fovY,
-                config.minSpeedMultiplier,
-                config.maxSpeedMultiplier,
-                config.predictionInterval,
-                config.auto_shoot,
-                config.bScope_multiplier,
-                config.triggerbot_bScope_multiplier);
-            OverlayConfig_MarkDirty();
-        }
-
-        OverlayUI::AdaptiveItemWidth();
-        if (ImGui::SliderInt("Capture FPS", &config.capture_fps, 0, 400))
+        if (OverlayUI::IntControlRow(
+            "Capture FPS",
+            &config.capture_fps,
+            0,
+            400,
+            1,
+            "FPS",
+            config.capture_fps == 0 ? "Capture thread disabled" : nullptr))
         {
             capture_fps_changed.store(true);
             OverlayConfig_MarkDirty();
         }
-
-        if (config.capture_fps == 0)
-        {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.25f, 0.25f, 1.0f), "Disabled");
-        }
+        if (OverlayUI::g_show_descriptions)
+            ImGui::TextDisabled("Current: %d FPS", config.capture_fps);
 
         if (config.capture_fps == 0 || config.capture_fps >= 61)
         {
             ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.35f, 1.0f), "Warning: high FPS may reduce performance.");
         }
 
-        if (ImGui::Checkbox("Circle mask", &config.circle_mask))
+        if (ImGui::Checkbox("Enable Circle Mask", &config.circle_mask))
         {
             capture_method_changed.store(true);
             OverlayConfig_MarkDirty();
         }
+        if (OverlayUI::g_show_descriptions)
+            ImGui::TextDisabled("Only detect targets in circular FOV (reduces false positives)");
 
 #ifdef USE_CUDA
         if (config.backend == "TRT")
@@ -122,11 +136,13 @@ void draw_capture_settings()
             if (!cudaCaptureAvailable)
                 ImGui::BeginDisabled();
 
-            if (ImGui::Checkbox("Use CUDA Direct Capture", &config.capture_use_cuda))
+            if (ImGui::Checkbox("CUDA Direct Capture", &config.capture_use_cuda))
             {
                 capture_method_changed.store(true);
                 OverlayConfig_MarkDirty();
             }
+            if (OverlayUI::g_show_descriptions)
+                ImGui::TextDisabled("Zero-copy GPU capture for lowest latency (requires NVIDIA GPU)");
 
             if (!cudaCaptureAvailable)
             {
@@ -165,11 +181,11 @@ void draw_capture_settings()
             }
         }
     }
-    OverlayUI::EndSection();
+    OverlayUI::EndCard();
 
     if (config.capture_method == "winrt")
     {
-        if (OverlayUI::BeginSection("WinRT", "capture_winrt"))
+        if (OverlayUI::BeginCard("WINRT SETTINGS", "capture_winrt"))
         {
             OverlayUI::AdaptiveItemWidth();
             ImGui::Combo("Source mode", &winrt_source_mode, "Monitor\0Window title (preview)\0");
@@ -204,12 +220,12 @@ void draw_capture_settings()
                 ImGui::PopItemFlag();
             }
         }
-        OverlayUI::EndSection();
+        OverlayUI::EndCard();
     }
 
     if (config.capture_method == "virtual_camera")
     {
-        if (OverlayUI::BeginSection("Virtual Camera", "capture_virtual_camera"))
+        if (OverlayUI::BeginCard("VIRTUAL CAMERA", "capture_virtual_camera"))
         {
             ensureVirtualCamerasLoaded();
             ImGui::Text("Select virtual camera:");
@@ -272,26 +288,24 @@ void draw_capture_settings()
                 virtual_camera_filter_buf[0] = '\0';
             }
 
-            OverlayUI::AdaptiveItemWidth();
-            if (ImGui::SliderInt("Virtual camera width", &config.virtual_camera_width, 128, 3840))
+            if (OverlayUI::IntControlRow("Virtual camera width", &config.virtual_camera_width, 128, 3840, 8, "px"))
             {
                 capture_method_changed.store(true);
                 OverlayConfig_MarkDirty();
             }
 
-            OverlayUI::AdaptiveItemWidth();
-            if (ImGui::SliderInt("Virtual camera heigth", &config.virtual_camera_heigth, 128, 2160))
+            if (OverlayUI::IntControlRow("Virtual camera heigth", &config.virtual_camera_heigth, 128, 2160, 8, "px"))
             {
                 capture_method_changed.store(true);
                 OverlayConfig_MarkDirty();
             }
         }
-        OverlayUI::EndSection();
+        OverlayUI::EndCard();
     }
 
     if (config.capture_method == "obs")
     {
-        if (OverlayUI::BeginSection("OBS", "capture_obs"))
+        if (OverlayUI::BeginCard("OBS", "capture_obs"))
         {
             if (ImGui::Checkbox("Enable OBS", &config.is_obs))
             {
@@ -323,6 +337,6 @@ void draw_capture_settings()
                 OverlayConfig_MarkDirty();
             }
         }
-        OverlayUI::EndSection();
+        OverlayUI::EndCard();
     }
 }
