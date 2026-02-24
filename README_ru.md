@@ -132,7 +132,7 @@
 
 | Захват экрана | Статус целей |
 |---|---|
-| ![Capture](docs\menu\сapture.jpg) | ![Status](docs\menu\status.jpg) |
+| ![Capture](docs/menu/сapture.jpg) | ![Status](docs/menu/status.jpg) |
 
 #### 🎛️ Контролы оверлея
 
