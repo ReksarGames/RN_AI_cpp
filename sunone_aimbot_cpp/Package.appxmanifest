@@ -1,4 +1,0 @@
-<Capabilities>
-  <rescap:Capability Name="graphicsCapture"/>
-  <rescap:Capability Name="graphicsCaptureWithoutBorder"/>
-</Capabilities>
