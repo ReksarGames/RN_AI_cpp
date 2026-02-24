@@ -113,6 +113,12 @@ void write_default_theme_file(const char* filename)
     out << "show_descriptions = 1\n";
     out << "row_button_width = 22\n";
     out << "row_input_width = 54\n";
+    out << "nav_width = 172\n";
+    out << "menu_bg_enabled = 0\n";
+    out << "menu_bg_opacity = 0.22\n";
+    out << "menu_bg_path = ui_bg.png\n";
+    out << "overlay_fps_text_size = 19\n";
+    out << "overlay_latency_text_size = 18\n";
 }
 
 bool load_and_apply_internal(const char* filename)
@@ -171,6 +177,12 @@ bool load_and_apply_internal(const char* filename)
             else if (key == "show_descriptions") OverlayUI::g_show_descriptions = (std::stoi(val) != 0);
             else if (key == "row_button_width") OverlayUI::g_row_button_width = std::stof(val);
             else if (key == "row_input_width") OverlayUI::g_row_input_width = std::stof(val);
+            else if (key == "nav_width") OverlayUI::g_nav_width = std::stof(val);
+            else if (key == "menu_bg_enabled") OverlayUI::g_menu_bg_enabled = (std::stoi(val) != 0);
+            else if (key == "menu_bg_opacity") OverlayUI::g_menu_bg_opacity = std::stof(val);
+            else if (key == "menu_bg_path") OverlayUI::g_menu_bg_path = val;
+            else if (key == "overlay_fps_text_size") OverlayUI::g_overlay_fps_text_size = std::stof(val);
+            else if (key == "overlay_latency_text_size") OverlayUI::g_overlay_latency_text_size = std::stof(val);
         }
         catch (...)
         {
@@ -180,6 +192,10 @@ bool load_and_apply_internal(const char* filename)
     style.Alpha = std::clamp(style.Alpha, 0.20f, 1.00f);
     OverlayUI::g_row_button_width = std::clamp(OverlayUI::g_row_button_width, 18.0f, 40.0f);
     OverlayUI::g_row_input_width = std::clamp(OverlayUI::g_row_input_width, 46.0f, 120.0f);
+    OverlayUI::g_nav_width = std::clamp(OverlayUI::g_nav_width, 120.0f, 360.0f);
+    OverlayUI::g_menu_bg_opacity = std::clamp(OverlayUI::g_menu_bg_opacity, 0.02f, 1.00f);
+    OverlayUI::g_overlay_fps_text_size = std::clamp(OverlayUI::g_overlay_fps_text_size, 10.0f, 48.0f);
+    OverlayUI::g_overlay_latency_text_size = std::clamp(OverlayUI::g_overlay_latency_text_size, 10.0f, 48.0f);
     return true;
 }
 
@@ -234,6 +250,12 @@ bool save_internal(const char* filename)
     out << "show_descriptions = " << (OverlayUI::g_show_descriptions ? 1 : 0) << "\n";
     out << "row_button_width = " << OverlayUI::g_row_button_width << "\n";
     out << "row_input_width = " << OverlayUI::g_row_input_width << "\n";
+    out << "nav_width = " << OverlayUI::g_nav_width << "\n";
+    out << "menu_bg_enabled = " << (OverlayUI::g_menu_bg_enabled ? 1 : 0) << "\n";
+    out << "menu_bg_opacity = " << OverlayUI::g_menu_bg_opacity << "\n";
+    out << "menu_bg_path = " << OverlayUI::g_menu_bg_path << "\n";
+    out << "overlay_fps_text_size = " << OverlayUI::g_overlay_fps_text_size << "\n";
+    out << "overlay_latency_text_size = " << OverlayUI::g_overlay_latency_text_size << "\n";
     return true;
 }
 }

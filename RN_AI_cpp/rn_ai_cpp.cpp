@@ -38,6 +38,7 @@
 #include "keyboard_listener.h"
 #include "overlay.h"
 #include "Game_overlay.h"
+#include "overlay/ui_runtime.h"
 #include "other_tools.h"
 #include "virtual_camera.h"
 
@@ -127,6 +128,38 @@ RECT GetMonitorRectByIndexOrPrimary(int monitorIndex)
 
     RECT fallback{ 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) };
     return fallback;
+}
+
+OverlayColor GetClassOverlayColor(int classId, uint8_t alpha)
+{
+    if (classId == 0)
+        return ARGB(alpha, 0, 220, 100);
+
+    static const uint8_t palette[][3] = {
+        { 235, 80, 80 },
+        { 80, 170, 255 },
+        { 255, 180, 70 },
+        { 180, 110, 255 },
+        { 255, 95, 170 },
+        { 80, 230, 220 },
+        { 230, 230, 80 },
+        { 255, 140, 210 }
+    };
+
+    const int idx = std::abs(classId) % static_cast<int>(sizeof(palette) / sizeof(palette[0]));
+    return ARGB(alpha, palette[idx][0], palette[idx][1], palette[idx][2]);
+}
+
+float GetOverlayInferenceLatencyMs()
+{
+    if (config.backend == "DML" && dml_detector)
+        return static_cast<float>(dml_detector->lastInferenceTimeDML.count());
+
+#ifdef USE_CUDA
+    return static_cast<float>(trt_detector.lastInferenceTime.count());
+#else
+    return 0.0f;
+#endif
 }
 
 void StopGameOverlay()
@@ -977,6 +1010,10 @@ static void draw_aim_sim_panel(
 void GameOverlayThreadFunction()
 {
     AimSimulationState aimSimState;
+    std::vector<cv::Rect> stickyBoxes;
+    std::vector<int> stickyClasses;
+    auto stickyUntil = std::chrono::steady_clock::time_point{};
+    constexpr auto kBoxHoldTime = std::chrono::milliseconds(90);
 
     while (!shouldExit)
     {
@@ -988,11 +1025,17 @@ void GameOverlayThreadFunction()
         bool drawBoxes = true;
         bool drawFuture = true;
         bool showCorrection = true;
+        bool showFpsCounter = true;
+        bool showLatency = true;
+        bool aimSimEnabled = false;
         int fa = 180, fr = 255, fg = 255, fb = 255;
         int ba = 255, br = 0, bg = 255, bb = 0;
         float frameThickness = 1.5f;
         float boxThickness = 2.0f;
         float futurePointRadius = 5.0f;
+        float aimScope = 40.0f;
+        float snapRadius = 4.0f;
+        float nearRadius = 12.0f;
 
         {
             std::lock_guard<std::mutex> lock(configMutex);
@@ -1004,11 +1047,17 @@ void GameOverlayThreadFunction()
             drawBoxes = config.game_overlay_draw_boxes;
             drawFuture = config.game_overlay_draw_future;
             showCorrection = config.game_overlay_show_target_correction;
+            showFpsCounter = config.game_overlay_show_fps_counter;
+            showLatency = config.game_overlay_show_latency;
+            aimSimEnabled = config.aim_sim_enabled;
             fa = config.game_overlay_frame_a; fr = config.game_overlay_frame_r; fg = config.game_overlay_frame_g; fb = config.game_overlay_frame_b;
             ba = config.game_overlay_box_a; br = config.game_overlay_box_r; bg = config.game_overlay_box_g; bb = config.game_overlay_box_b;
             frameThickness = config.game_overlay_frame_thickness;
             boxThickness = config.game_overlay_box_thickness;
             futurePointRadius = config.game_overlay_future_point_radius;
+            aimScope = std::max(4.0f, static_cast<float>(config.aim_bot_scope));
+            snapRadius = std::max(1.0f, static_cast<float>(config.snapRadius));
+            nearRadius = std::max(snapRadius + 1.0f, static_cast<float>(config.nearRadius));
         }
 
         if (!enabled)
@@ -1052,19 +1101,42 @@ void GameOverlayThreadFunction()
         }
 
         std::vector<cv::Rect> boxesCopy;
+        std::vector<int> classesCopy;
         {
             std::lock_guard<std::mutex> lk(detectionBuffer.mutex);
             boxesCopy = detectionBuffer.boxes;
+            classesCopy = detectionBuffer.classes;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (!boxesCopy.empty())
+        {
+            stickyBoxes = boxesCopy;
+            stickyClasses = classesCopy;
+            stickyUntil = now + kBoxHoldTime;
+        }
+        else if (!stickyBoxes.empty() && now <= stickyUntil)
+        {
+            boxesCopy = stickyBoxes;
+            classesCopy = stickyClasses;
+        }
+        else
+        {
+            stickyBoxes.clear();
+            stickyClasses.clear();
         }
 
         if (drawBoxes)
         {
-            const OverlayColor boxCol = ARGB((uint8_t)ba, (uint8_t)br, (uint8_t)bg, (uint8_t)bb);
-            for (const auto& b : boxesCopy)
+            const OverlayColor fallbackCol = ARGB((uint8_t)ba, (uint8_t)br, (uint8_t)bg, (uint8_t)bb);
+            for (size_t i = 0; i < boxesCopy.size(); ++i)
             {
+                const auto& b = boxesCopy[i];
+                const int cls = (i < classesCopy.size()) ? classesCopy[i] : -1;
+                const OverlayColor classCol = (cls >= 0) ? GetClassOverlayColor(cls, static_cast<uint8_t>(ba)) : fallbackCol;
                 gameOverlayPtr->AddRect(
                     { offX + static_cast<float>(b.x), offY + static_cast<float>(b.y), static_cast<float>(b.width), static_cast<float>(b.height) },
-                    boxCol,
+                    classCol,
                     boxThickness);
             }
         }
@@ -1084,13 +1156,42 @@ void GameOverlayThreadFunction()
         {
             const float cx = static_cast<float>(monLeft) + static_cast<float>(sw) * 0.5f;
             const float cy = static_cast<float>(monTop) + static_cast<float>(sh) * 0.5f;
-            const float scope = std::max(4.0f, static_cast<float>(config.aim_bot_scope));
-            gameOverlayPtr->AddCircle({ cx, cy, scope }, ARGB(140, 80, 120, 255), 1.5f);
+            gameOverlayPtr->AddCircle({ cx, cy, aimScope }, ARGB(140, 80, 120, 255), 1.5f);
+            gameOverlayPtr->AddCircle({ cx, cy, snapRadius }, ARGB(190, 65, 245, 150), 1.25f);
+            gameOverlayPtr->AddCircle({ cx, cy, nearRadius }, ARGB(190, 255, 210, 70), 1.25f);
             gameOverlayPtr->AddLine({ cx - 8.0f, cy, cx + 8.0f, cy }, ARGB(200, 255, 255, 255), 1.0f);
             gameOverlayPtr->AddLine({ cx, cy - 8.0f, cx, cy + 8.0f }, ARGB(200, 255, 255, 255), 1.0f);
+
+            wchar_t corrLine[128];
+            swprintf_s(corrLine, L"scope %.0f | snap %.1f | near %.1f", aimScope, snapRadius, nearRadius);
+            gameOverlayPtr->AddText(cx + 12.0f, cy + 10.0f, corrLine, 16.0f, ARGB(220, 230, 235, 245));
         }
 
-        if (config.aim_sim_enabled)
+        if (showFpsCounter || showLatency)
+        {
+            float textY = static_cast<float>(monTop) + 14.0f;
+            const float textX = static_cast<float>(monLeft + sw) - 230.0f;
+
+            if (showFpsCounter)
+            {
+                wchar_t fpsLine[64];
+                swprintf_s(fpsLine, L"FPS: %d", captureFps.load());
+                const float fpsTextSize = std::max(10.0f, OverlayUI::g_overlay_fps_text_size);
+                gameOverlayPtr->AddText(textX, textY, fpsLine, fpsTextSize, ARGB(235, 98, 238, 118));
+                textY += fpsTextSize + 3.0f;
+            }
+
+            if (showLatency)
+            {
+                const float latencyMs = std::max(0.0f, GetOverlayInferenceLatencyMs());
+                wchar_t latLine[64];
+                swprintf_s(latLine, L"Latency: %.2f ms", latencyMs);
+                const float latencyTextSize = std::max(10.0f, OverlayUI::g_overlay_latency_text_size);
+                gameOverlayPtr->AddText(textX, textY, latLine, latencyTextSize, ARGB(235, 110, 190, 255));
+            }
+        }
+
+        if (aimSimEnabled)
         {
             draw_aim_sim_panel(gameOverlayPtr, aimSimState, sw, sh, monLeft, monTop);
         }

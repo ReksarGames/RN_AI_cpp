@@ -176,6 +176,8 @@ public:
     bool game_overlay_draw_wind_tail;
     bool game_overlay_draw_frame;
     bool game_overlay_show_target_correction;
+    bool game_overlay_show_fps_counter;
+    bool game_overlay_show_latency;
     int game_overlay_box_a;
     int game_overlay_box_r;
     int game_overlay_box_g;

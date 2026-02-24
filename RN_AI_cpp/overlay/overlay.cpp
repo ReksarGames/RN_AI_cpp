@@ -27,6 +27,7 @@
 #include "virtual_camera.h"
 #include "config_dirty.h"
 #include "ui_theme.h"
+#include "ui_runtime.h"
 #ifdef USE_CUDA
 #include "trt_detector.h"
 #endif
@@ -60,6 +61,11 @@ std::vector<std::string> key_names;
 std::vector<const char*> key_names_cstrs;
 
 ID3D11ShaderResourceView* body_texture = nullptr;
+ID3D11ShaderResourceView* g_menu_bg_texture = nullptr;
+int g_menu_bg_w = 0;
+int g_menu_bg_h = 0;
+std::string g_menu_bg_loaded_path;
+bool g_menu_bg_loaded_ok = false;
 
 bool InitializeBlendState()
 {
@@ -153,6 +159,11 @@ void CleanupRenderTarget()
 void CleanupDeviceD3D()
 {
     CleanupRenderTarget();
+    if (g_menu_bg_texture) { g_menu_bg_texture->Release(); g_menu_bg_texture = nullptr; }
+    g_menu_bg_w = 0;
+    g_menu_bg_h = 0;
+    g_menu_bg_loaded_path.clear();
+    g_menu_bg_loaded_ok = false;
     if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = NULL; }
     if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
     if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
@@ -195,6 +206,19 @@ void SetupImGui()
 
     ImGuiIO& io = ImGui::GetIO();
     io.FontGlobalScale = config.overlay_ui_scale;
+
+    // Merge Windows icon font into the default ImGui font for sidebar icons.
+    io.Fonts->Clear();
+    io.Fonts->AddFontDefault();
+    ImFontConfig icon_cfg{};
+    icon_cfg.MergeMode = true;
+    icon_cfg.PixelSnapH = true;
+    static const ImWchar icon_ranges[] = { 0xE700, 0xF8FF, 0 };
+    ImFont* icon_font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segmdl2.ttf", 17.0f, &icon_cfg, icon_ranges);
+    if (!icon_font)
+    {
+        io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\Segoe Fluent Icons.ttf", 17.0f, &icon_cfg, icon_ranges);
+    }
 
     ImGui_ImplWin32_Init(g_hwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
@@ -324,98 +348,298 @@ void OverlayThread()
             ImGui::SetNextWindowPos(ImVec2(0, 0));
             ImGui::SetNextWindowSize(ImVec2((float)overlayWidth, (float)overlayHeight));
 
-            ImGui::Begin("Options", &show_overlay, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
+            ImGui::Begin(
+                "Options",
+                &show_overlay,
+                ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar |
+                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             {
                 std::lock_guard<std::mutex> lock(configMutex);
-
-                if (ImGui::BeginTabBar("Options tab bar"))
+                const bool want_bg = OverlayUI::g_menu_bg_enabled && !OverlayUI::g_menu_bg_path.empty();
+                if (!want_bg)
                 {
-                    if (ImGui::BeginTabItem("Capture"))
+                    if (g_menu_bg_texture)
                     {
-                        draw_capture_settings();
+                        g_menu_bg_texture->Release();
+                        g_menu_bg_texture = nullptr;
+                    }
+                    g_menu_bg_loaded_path.clear();
+                    g_menu_bg_loaded_ok = false;
+                    g_menu_bg_w = 0;
+                    g_menu_bg_h = 0;
+                }
+                else if (g_menu_bg_loaded_path != OverlayUI::g_menu_bg_path || !g_menu_bg_loaded_ok)
+                {
+                    if (g_menu_bg_texture)
+                    {
+                        g_menu_bg_texture->Release();
+                        g_menu_bg_texture = nullptr;
+                    }
+                    g_menu_bg_w = 0;
+                    g_menu_bg_h = 0;
+                    g_menu_bg_loaded_ok = LoadTextureFromFile(
+                        OverlayUI::g_menu_bg_path.c_str(),
+                        g_pd3dDevice,
+                        &g_menu_bg_texture,
+                        &g_menu_bg_w,
+                        &g_menu_bg_h);
+                    g_menu_bg_loaded_path = OverlayUI::g_menu_bg_path;
+                }
 
-                        ImGui::EndTabItem();
+                if (g_menu_bg_texture && g_menu_bg_loaded_ok)
+                {
+                    ImDrawList* bg = ImGui::GetWindowDrawList();
+                    ImVec2 wp = ImGui::GetWindowPos();
+                    ImVec2 ws = ImGui::GetWindowSize();
+                    const float a = (std::clamp)(OverlayUI::g_menu_bg_opacity, 0.02f, 1.0f);
+                    bg->AddImage(
+                        (ImTextureID)g_menu_bg_texture,
+                        wp,
+                        ImVec2(wp.x + ws.x, wp.y + ws.y),
+                        ImVec2(0, 0),
+                        ImVec2(1, 1),
+                        IM_COL32(255, 255, 255, (int)(a * 255.0f)));
+                }
+
+                static int selected_tab = 0;
+                if (OverlayUI::g_nav_width < 120.0f)
+                    OverlayUI::g_nav_width = 172.0f;
+                const float nav_width = OverlayUI::g_nav_width * config.overlay_ui_scale;
+
+                ImGui::BeginChild("left_nav", ImVec2(nav_width, 0), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                ImGui::Text("NAVIGATION");
+                ImGui::Separator();
+
+                enum class NavIcon
+                {
+                    Camera, Target, Layers, Mouse, Brain, Gamepad, Eye, Chart, Bug, Cube
+                };
+                struct NavItem { NavIcon icon; const char* label; };
+                static const NavItem kItems[] = {
+                    { NavIcon::Camera, "Capture" },
+                    { NavIcon::Target, "Target" },
+                    { NavIcon::Layers, "Classes" },
+                    { NavIcon::Mouse, "Mouse" },
+                    { NavIcon::Brain, "AI" },
+                    { NavIcon::Gamepad, "Buttons" },
+                    { NavIcon::Eye, "Overlay" },
+                    { NavIcon::Eye, "Game Overlay" },
+                    { NavIcon::Chart, "Stats" },
+                    { NavIcon::Bug, "Debug" },
+                    { NavIcon::Cube, "Components" },
+                };
+
+                auto draw_nav_icon = [](ImDrawList* dl, NavIcon icon, const ImVec2& p, float s, ImU32 col)
+                {
+                    const float t = 1.7f;
+                    const float r = s * 0.5f;
+                    const float cx = p.x + r;
+                    const float cy = p.y + r;
+                    switch (icon)
+                    {
+                    case NavIcon::Camera:
+                        dl->AddRect(ImVec2(p.x + s * 0.12f, p.y + s * 0.28f), ImVec2(p.x + s * 0.88f, p.y + s * 0.80f), col, 3.0f, 0, t);
+                        dl->AddCircle(ImVec2(cx, p.y + s * 0.54f), s * 0.14f, col, 0, t);
+                        dl->AddRect(ImVec2(p.x + s * 0.26f, p.y + s * 0.16f), ImVec2(p.x + s * 0.44f, p.y + s * 0.30f), col, 2.0f, 0, t);
+                        break;
+                    case NavIcon::Target:
+                        dl->AddCircle(ImVec2(cx, cy), s * 0.36f, col, 0, t);
+                        dl->AddCircle(ImVec2(cx, cy), s * 0.16f, col, 0, t);
+                        dl->AddCircleFilled(ImVec2(cx, cy), s * 0.04f, col);
+                        break;
+                    case NavIcon::Layers:
+                        for (int i = 0; i < 3; ++i)
+                        {
+                            float y = p.y + s * (0.22f + i * 0.22f);
+                            ImVec2 pts[4] = {
+                                ImVec2(cx, y),
+                                ImVec2(p.x + s * 0.86f, y + s * 0.10f),
+                                ImVec2(cx, y + s * 0.20f),
+                                ImVec2(p.x + s * 0.14f, y + s * 0.10f)
+                            };
+                            dl->AddPolyline(pts, 4, col, true, t);
+                        }
+                        break;
+                    case NavIcon::Mouse:
+                        dl->AddRect(ImVec2(p.x + s * 0.30f, p.y + s * 0.14f), ImVec2(p.x + s * 0.70f, p.y + s * 0.86f), col, 6.0f, 0, t);
+                        dl->AddLine(ImVec2(cx, p.y + s * 0.20f), ImVec2(cx, p.y + s * 0.44f), col, t);
+                        dl->AddCircleFilled(ImVec2(cx, p.y + s * 0.30f), s * 0.03f, col);
+                        break;
+                    case NavIcon::Brain:
+                        dl->AddCircle(ImVec2(p.x + s * 0.38f, p.y + s * 0.40f), s * 0.16f, col, 0, t);
+                        dl->AddCircle(ImVec2(p.x + s * 0.62f, p.y + s * 0.40f), s * 0.16f, col, 0, t);
+                        dl->AddCircle(ImVec2(p.x + s * 0.38f, p.y + s * 0.64f), s * 0.16f, col, 0, t);
+                        dl->AddCircle(ImVec2(p.x + s * 0.62f, p.y + s * 0.64f), s * 0.16f, col, 0, t);
+                        dl->AddLine(ImVec2(cx, p.y + s * 0.22f), ImVec2(cx, p.y + s * 0.82f), col, t);
+                        break;
+                    case NavIcon::Gamepad:
+                        dl->AddRect(ImVec2(p.x + s * 0.16f, p.y + s * 0.36f), ImVec2(p.x + s * 0.84f, p.y + s * 0.78f), col, 5.0f, 0, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.30f, p.y + s * 0.56f), ImVec2(p.x + s * 0.42f, p.y + s * 0.56f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.36f, p.y + s * 0.50f), ImVec2(p.x + s * 0.36f, p.y + s * 0.62f), col, t);
+                        dl->AddCircle(ImVec2(p.x + s * 0.64f, p.y + s * 0.56f), s * 0.04f, col, 0, t);
+                        dl->AddCircle(ImVec2(p.x + s * 0.74f, p.y + s * 0.56f), s * 0.04f, col, 0, t);
+                        break;
+                    case NavIcon::Eye:
+                        dl->AddBezierCubic(ImVec2(p.x + s * 0.14f, cy), ImVec2(p.x + s * 0.30f, p.y + s * 0.20f), ImVec2(p.x + s * 0.70f, p.y + s * 0.20f), ImVec2(p.x + s * 0.86f, cy), col, t);
+                        dl->AddBezierCubic(ImVec2(p.x + s * 0.14f, cy), ImVec2(p.x + s * 0.30f, p.y + s * 0.80f), ImVec2(p.x + s * 0.70f, p.y + s * 0.80f), ImVec2(p.x + s * 0.86f, cy), col, t);
+                        dl->AddCircle(ImVec2(cx, cy), s * 0.10f, col, 0, t);
+                        break;
+                    case NavIcon::Chart:
+                        dl->AddLine(ImVec2(p.x + s * 0.16f, p.y + s * 0.80f), ImVec2(p.x + s * 0.86f, p.y + s * 0.80f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.16f, p.y + s * 0.24f), ImVec2(p.x + s * 0.16f, p.y + s * 0.80f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.32f, p.y + s * 0.80f), ImVec2(p.x + s * 0.32f, p.y + s * 0.52f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.50f, p.y + s * 0.80f), ImVec2(p.x + s * 0.50f, p.y + s * 0.36f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.68f, p.y + s * 0.80f), ImVec2(p.x + s * 0.68f, p.y + s * 0.60f), col, t);
+                        break;
+                    case NavIcon::Bug:
+                        dl->AddCircle(ImVec2(cx, p.y + s * 0.54f), s * 0.20f, col, 0, t);
+                        dl->AddCircle(ImVec2(cx, p.y + s * 0.30f), s * 0.10f, col, 0, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.26f, p.y + s * 0.50f), ImVec2(p.x + s * 0.12f, p.y + s * 0.44f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.26f, p.y + s * 0.62f), ImVec2(p.x + s * 0.12f, p.y + s * 0.68f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.74f, p.y + s * 0.50f), ImVec2(p.x + s * 0.88f, p.y + s * 0.44f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.74f, p.y + s * 0.62f), ImVec2(p.x + s * 0.88f, p.y + s * 0.68f), col, t);
+                        break;
+                    case NavIcon::Cube:
+                    {
+                        ImVec2 pts[6] = {
+                            ImVec2(cx, p.y + s * 0.16f),
+                            ImVec2(p.x + s * 0.80f, p.y + s * 0.30f),
+                            ImVec2(p.x + s * 0.80f, p.y + s * 0.68f),
+                            ImVec2(cx, p.y + s * 0.84f),
+                            ImVec2(p.x + s * 0.20f, p.y + s * 0.68f),
+                            ImVec2(p.x + s * 0.20f, p.y + s * 0.30f)
+                        };
+                        dl->AddPolyline(pts, 6, col, true, t);
+                        dl->AddLine(ImVec2(cx, p.y + s * 0.16f), ImVec2(cx, p.y + s * 0.52f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.20f, p.y + s * 0.30f), ImVec2(cx, p.y + s * 0.52f), col, t);
+                        dl->AddLine(ImVec2(p.x + s * 0.80f, p.y + s * 0.30f), ImVec2(cx, p.y + s * 0.52f), col, t);
+                        break;
+                    }
+                    }
+                };
+
+                for (int i = 0; i < IM_ARRAYSIZE(kItems); ++i)
+                {
+                    const bool active = (selected_tab == i);
+                    if (active)
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.29f, 0.38f, 0.55f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.33f, 0.43f, 0.70f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.28f, 0.36f, 0.47f, 0.80f));
+                    }
+                    else
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.00f, 0.00f, 0.00f, 0.00f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.24f, 0.30f, 0.35f));
+                        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.28f, 0.36f, 0.50f));
                     }
 
-                    if (ImGui::BeginTabItem("Target"))
-                    {
-                        draw_target();
+                    std::string title = std::string("      ") + kItems[i].label;
+                    if (ImGui::Button(title.c_str(), ImVec2(-1.0f, 34.0f * config.overlay_ui_scale)))
+                        selected_tab = i;
+                    ImVec2 rmin = ImGui::GetItemRectMin();
+                    float ih = ImGui::GetItemRectSize().y;
+                    ImU32 icol = active ? IM_COL32(248, 248, 248, 255) : IM_COL32(220, 220, 220, 245);
+                    ImVec2 ipos(rmin.x + 8.0f * config.overlay_ui_scale, rmin.y + (ih - 16.0f * config.overlay_ui_scale) * 0.5f);
+                    draw_nav_icon(ImGui::GetWindowDrawList(), kItems[i].icon, ipos, 16.0f * config.overlay_ui_scale, icol);
+                    ImGui::PopStyleColor(3);
+                }
+                ImGui::EndChild();
 
-                        ImGui::EndTabItem();
-                    }
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.19f, 0.24f, 0.90f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.31f, 0.40f, 1.00f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.25f, 0.31f, 0.40f, 1.00f));
+                ImGui::Button("##nav_splitter", ImVec2(6.0f, -1.0f));
+                ImGui::PopStyleColor(3);
+                if (ImGui::IsItemActive())
+                {
+                    OverlayUI::g_nav_width += ImGui::GetIO().MouseDelta.x / (std::max)(0.25f, config.overlay_ui_scale);
+                    OverlayUI::g_nav_width = (std::clamp)(OverlayUI::g_nav_width, 120.0f, 360.0f);
+                    OverlayTheme_Save("ui_theme.ini");
+                }
 
-                    if (ImGui::BeginTabItem("Classes"))
-                    {
-                        draw_classes();
+                ImGui::SameLine();
+                ImGui::BeginChild(
+                    "right_panel",
+                    ImVec2(0, 0),
+                    false,
+                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+                switch (selected_tab)
+                {
+                case 0: draw_capture_settings(); break;
+                case 1: draw_target(); break;
+                case 2: draw_classes(); break;
+                case 3: draw_mouse(); break;
+                case 4: draw_ai(); break;
+                case 5: draw_buttons(); break;
+                case 6: draw_overlay(); break;
+                case 7: draw_game_overlay_settings(); break;
+                case 8: draw_stats(); break;
+                case 9: draw_debug(); break;
+                case 10: draw_components(); break;
+                default: draw_capture_settings(); break;
+                }
+                ImGui::EndChild();
 
-                        ImGui::EndTabItem();
-                    }
+                if (prev_opacity != config.overlay_opacity)
+                {
+                    BYTE opacity = config.overlay_opacity;
+                    SetLayeredWindowAttributes(g_hwnd, 0, opacity, LWA_ALPHA);
+                    OverlayConfig_MarkDirty();
+                    prev_opacity = config.overlay_opacity;
+                }
 
-                    if (ImGui::BeginTabItem("Mouse"))
-                    {
-                        draw_mouse();
+                // Visible resize handles (right edge, bottom edge, and corner).
+                const float edge_thickness = 8.0f;
+                const float grip_size = 24.0f;
+                const ImVec2 wpos = ImGui::GetWindowPos();
+                const ImVec2 wsize = ImGui::GetWindowSize();
+                ImDrawList* wnd_dl = ImGui::GetWindowDrawList();
 
-                        ImGui::EndTabItem();
-                    }
+                // Right edge handle.
+                ImGui::SetCursorScreenPos(ImVec2(wpos.x + wsize.x - edge_thickness, wpos.y));
+                ImGui::InvisibleButton("##overlay_resize_right", ImVec2(edge_thickness, wsize.y - grip_size));
+                if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                if (ImGui::IsItemActive())
+                {
+                    overlayWidth = (std::max)(520, overlayWidth + static_cast<int>(ImGui::GetIO().MouseDelta.x));
+                    SetWindowPos(g_hwnd, NULL, 0, 0, overlayWidth, overlayHeight, SWP_NOMOVE | SWP_NOZORDER);
+                }
 
-                    if (ImGui::BeginTabItem("AI"))
-                    {
-                        draw_ai();
+                // Bottom edge handle.
+                ImGui::SetCursorScreenPos(ImVec2(wpos.x, wpos.y + wsize.y - edge_thickness));
+                ImGui::InvisibleButton("##overlay_resize_bottom", ImVec2(wsize.x - grip_size, edge_thickness));
+                if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+                if (ImGui::IsItemActive())
+                {
+                    overlayHeight = (std::max)(360, overlayHeight + static_cast<int>(ImGui::GetIO().MouseDelta.y));
+                    SetWindowPos(g_hwnd, NULL, 0, 0, overlayWidth, overlayHeight, SWP_NOMOVE | SWP_NOZORDER);
+                }
 
-                        ImGui::EndTabItem();
-                    }
-
-                    if (ImGui::BeginTabItem("Buttons"))
-                    {
-                        draw_buttons();
-
-                        ImGui::EndTabItem();
-                    }
-
-                    if (ImGui::BeginTabItem("Overlay"))
-                    {
-                        draw_overlay();
-
-                        ImGui::EndTabItem();
-                    }
-
-                    if (ImGui::BeginTabItem("Game Overlay"))
-                    {
-                        draw_game_overlay_settings();
-
-                        ImGui::EndTabItem();
-                    }
-
-                    if (ImGui::BeginTabItem("Stats"))
-                    {
-                        draw_stats();
-
-                        ImGui::EndTabItem();
-                    }
-
-                    if (ImGui::BeginTabItem("Debug"))
-                    {
-                        draw_debug();
-
-                        ImGui::EndTabItem();
-                    }
-
-                    if (ImGui::BeginTabItem("Components"))
-                    {
-                        draw_components();
-
-                        ImGui::EndTabItem();
-                    }
-
-                    if (prev_opacity != config.overlay_opacity)
-                    {
-                        BYTE opacity = config.overlay_opacity;
-                        SetLayeredWindowAttributes(g_hwnd, 0, opacity, LWA_ALPHA);
-                        OverlayConfig_MarkDirty();
-                        prev_opacity = config.overlay_opacity;
-                    }
-
-                ImGui::EndTabBar();
+                // Bottom-right corner grip.
+                ImVec2 grip_pos(wpos.x + wsize.x - grip_size, wpos.y + wsize.y - grip_size);
+                ImGui::SetCursorScreenPos(grip_pos);
+                ImGui::InvisibleButton("##overlay_resize_grip", ImVec2(grip_size, grip_size));
+                const bool grip_hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+                if (grip_hot)
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
+                const ImU32 grip_col = grip_hot ? IM_COL32(190, 220, 255, 240) : IM_COL32(145, 170, 205, 190);
+                wnd_dl->AddLine(
+                    ImVec2(grip_pos.x + 6.0f, grip_pos.y + grip_size - 4.0f),
+                    ImVec2(grip_pos.x + grip_size - 4.0f, grip_pos.y + 6.0f),
+                    grip_col, 1.8f);
+                wnd_dl->AddLine(
+                    ImVec2(grip_pos.x + 11.0f, grip_pos.y + grip_size - 4.0f),
+                    ImVec2(grip_pos.x + grip_size - 4.0f, grip_pos.y + 11.0f),
+                    grip_col, 1.8f);
+                if (ImGui::IsItemActive())
+                {
+                    overlayWidth = (std::max)(520, overlayWidth + static_cast<int>(ImGui::GetIO().MouseDelta.x));
+                    overlayHeight = (std::max)(360, overlayHeight + static_cast<int>(ImGui::GetIO().MouseDelta.y));
+                    SetWindowPos(g_hwnd, NULL, 0, 0, overlayWidth, overlayHeight, SWP_NOMOVE | SWP_NOZORDER);
                 }
             }
 

@@ -398,9 +398,12 @@ void draw_mouse()
     ImGui::SeparatorText("Manage Profiles");
 
     static char new_profile_name[64] = "";
-    ImGui::InputText("New profile name", new_profile_name, sizeof(new_profile_name));
+    const float add_btn_w = 96.0f;
+    const float spacing = ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SetNextItemWidth((std::max)(120.0f, ImGui::GetContentRegionAvail().x - add_btn_w - spacing));
+    ImGui::InputTextWithHint("##new_profile_name", "New profile name", new_profile_name, sizeof(new_profile_name));
     ImGui::SameLine();
-    if (ImGui::Button("Add Profile"))
+    if (ImGui::Button("Add Profile", ImVec2(add_btn_w, 0.0f)))
     {
         std::string name = std::string(new_profile_name);
         if (!name.empty() && config.game_profiles.count(name) == 0)

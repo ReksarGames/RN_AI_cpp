@@ -213,6 +213,8 @@ bool Config::loadConfig(const std::string& filename)
         game_overlay_draw_wind_tail = true;
         game_overlay_draw_frame = true;
         game_overlay_show_target_correction = true;
+        game_overlay_show_fps_counter = true;
+        game_overlay_show_latency = true;
         game_overlay_box_a = 255;
         game_overlay_box_r = 0;
         game_overlay_box_g = 255;
@@ -706,6 +708,8 @@ bool Config::loadConfig(const std::string& filename)
     game_overlay_draw_wind_tail = get_bool("game_overlay_draw_wind_tail", true);
     game_overlay_draw_frame = get_bool("game_overlay_draw_frame", true);
     game_overlay_show_target_correction = get_bool("game_overlay_show_target_correction", true);
+    game_overlay_show_fps_counter = get_bool("game_overlay_show_fps_counter", true);
+    game_overlay_show_latency = get_bool("game_overlay_show_latency", true);
     game_overlay_box_a = get_long("game_overlay_box_a", 255);
     game_overlay_box_r = get_long("game_overlay_box_r", 0);
     game_overlay_box_g = get_long("game_overlay_box_g", 255);
@@ -989,6 +993,8 @@ bool Config::saveConfig(const std::string& filename)
         << "game_overlay_draw_wind_tail = " << (game_overlay_draw_wind_tail ? "true" : "false") << "\n"
         << "game_overlay_draw_frame = " << (game_overlay_draw_frame ? "true" : "false") << "\n"
         << "game_overlay_show_target_correction = " << (game_overlay_show_target_correction ? "true" : "false") << "\n"
+        << "game_overlay_show_fps_counter = " << (game_overlay_show_fps_counter ? "true" : "false") << "\n"
+        << "game_overlay_show_latency = " << (game_overlay_show_latency ? "true" : "false") << "\n"
         << "game_overlay_box_a = " << game_overlay_box_a << "\n"
         << "game_overlay_box_r = " << game_overlay_box_r << "\n"
         << "game_overlay_box_g = " << game_overlay_box_g << "\n"

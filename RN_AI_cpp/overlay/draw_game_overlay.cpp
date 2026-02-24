@@ -40,6 +40,12 @@ void draw_game_overlay_settings()
         if (ImGui::Checkbox("Show Target Correction", &config.game_overlay_show_target_correction))
             OverlayConfig_MarkDirty();
 
+        if (ImGui::Checkbox("Show FPS Counter", &config.game_overlay_show_fps_counter))
+            OverlayConfig_MarkDirty();
+
+        if (ImGui::Checkbox("Show Latency", &config.game_overlay_show_latency))
+            OverlayConfig_MarkDirty();
+
         OverlayUI::EndSection();
     }
 
