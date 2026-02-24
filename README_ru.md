@@ -63,7 +63,7 @@
 ✅ CUDA 12.8 + TensorRT 10.8 (встроено)
 ❌ Не поддерживает GTX 10xx/Pascal и старше
 ```
-
+Realese — https://mega.nz/file/T8IFHS7I#70_WjY_-3rDZ82U3yKS3meS8mk3bV29_RFrSCQRlFhg
 **Возможности:**
 - Переключение между CUDA+TensorRT и DML в настройках
 - Максимальный FPS и точность
