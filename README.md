@@ -70,7 +70,7 @@
 - Switch between CUDA+TensorRT and DML in settings
 - Maximum FPS and accuracy
 - Professional-grade performance
-
+Realese — https://mega.nz/file/T8IFHS7I#70_WjY_-3rDZ82U3yKS3meS8mk3bV29_RFrSCQRlFhg
 </details>
 
 ---
